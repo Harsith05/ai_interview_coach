@@ -1,6 +1,6 @@
-What is semantic HTML and why is it important?
-Explain the CSS box model.
-What is the difference between block and inline elements?
-Describe event delegation in JavaScript.
-What is Flexbox and why use it?
-What is CORS and why does it matter?
+question,answer
+What is the difference between inline, inline-blockand block elements in CSS?Inline does not start a new line and only takes needed width inline-block allows setting dimensions without line break block starts on a new line and takes full width.
+Explain the Virtual DOM in React.,The Virtual DOM is a lightweight copy of the real DOM that React uses to efficiently update UI by comparing differences and applying only necessary changes.
+What are media queries in CSS?,Media queries are CSS rules that apply styles conditionally based on device characteristics like screen width or resolution.
+What is event bubbling in JavaScript?,Event bubbling is the process where an event triggered on a child element propagates up to its parent elements.
+What is the difference between localStorage, sessionStorage and cookies?localStorage persists data with no expiry sessionStorage persists only for the session cookies can store small amounts of data with expiration and are sent with every HTTP request.

@@ -1,6 +1,6 @@
-What is data cleaning and why is it important?
-Explain the difference between descriptive and predictive analytics.
-What is a pivot table used for?
-How would you handle missing data?
-Explain correlation vs causation.
-What is A/B testing?
+question,answer
+What is data cleaning and why is it important?,Data cleaning involves removing or fixing incorrect corrupted or incomplete records to improve the quality of analysis.
+Explain the difference between descriptive diagnostic predictive and prescriptive analytics.,Descriptive shows what happened diagnostic explains why predictive forecasts future outcomes and prescriptive suggests actions.
+What is a p-value in hypothesis testing?,A p-value measures the probability of obtaining observed results under the null hypothesis; a small p-value indicates strong evidence against the null.
+What are joins in SQL? Give examples.,Joins combine rows from multiple tables based on a related column; e.g. INNER JOIN returns matches LEFT JOIN returns all rows from left with matches from right.
+What is correlation vs causation?,Correlation shows statistical relationship between variables while causation indicates that one variable directly affects another.

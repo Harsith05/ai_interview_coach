@@ -1,5 +1,7 @@
-What is a RESTful API?
-Explain the difference between SQL and NoSQL.
-What is middleware in web frameworks?
-How would you scale a web application?
-What is authentication vs authorization?
+question,answer
+What is REST API?,REST API is an architectural style for building web services using HTTP methods like GET, POST, PUT, DELETE.
+Explain JWT and its use in authentication.,JWT (JSON Web Token) is a compact token used to securely transmit information between parties, often for authentication and authorization.
+What is the difference between SQL and NoSQL databases?,SQL databases are relational with structured schemas, while NoSQL databases are schema-less and support unstructured or semi-structured data.
+What is load balancing in backend systems?,Load balancing distributes network traffic across multiple servers to ensure reliability and performance.
+Explain the concept of middleware in backend frameworks.,Middleware are functions that sit between request and response handling to process tasks like logging, authentication, or data parsing.
+
