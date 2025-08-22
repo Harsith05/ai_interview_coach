@@ -1,17 +1,18 @@
 # scripts/nlp_scoring.py
-from sentence_transformers import SentenceTransformer, util
-import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-# load model once
-MODEL = SentenceTransformer('all-MiniLM-L6-v2')  # lightweight & fast
-
-def compute_similarity(user_text: str, ideal_text: str) -> float:
-    if not user_text or not ideal_text:
+def similarity_score(user_answer: str, ideal_answer: str) -> float:
+    """
+    TF-IDF cosine similarity between user answer and ideal answer.
+    Returns float between 0.0 and 1.0
+    """
+    user_answer = (user_answer or "").strip().lower()
+    ideal_answer = (ideal_answer or "").strip().lower()
+    if not user_answer or not ideal_answer:
         return 0.0
-    # encode both
-    emb1 = MODEL.encode(user_text, convert_to_tensor=True)
-    emb2 = MODEL.encode(ideal_text, convert_to_tensor=True)
-    cos = util.cos_sim(emb1, emb2).item()
-    # clamp to 0..1
-    cos = max(0.0, min(1.0, cos))
-    return float(cos)
+
+    vect = TfidfVectorizer(stop_words='english')
+    X = vect.fit_transform([user_answer, ideal_answer])
+    sim = cosine_similarity(X[0:1], X[1:2])[0, 0]
+    return float(max(0.0, min(1.0, sim)))

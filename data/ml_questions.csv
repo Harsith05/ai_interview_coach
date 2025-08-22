@@ -1,4 +1,4 @@
-question,answer
+
 What is overfitting in machine learning?,Overfitting occurs when a model learns noise or details from training data instead of the general pattern leading to poor generalization on new data.
 Explain the bias-variance tradeoff.,Bias-variance tradeoff is the balance between underfitting (high bias) and overfitting (high variance); the goal is to minimize total error.
 What is gradient descent?,Gradient descent is an optimization algorithm that updates model parameters iteratively to minimize the loss function.

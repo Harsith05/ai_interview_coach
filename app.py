@@ -2,6 +2,10 @@ from flask import Flask, render_template, request, redirect, url_for, Response, 
 import csv, random, io, base64
 import cv2
 import numpy as np
+from Scripts.nlp_scoring import similarity_score
+import io
+from pydub import AudioSegment
+import speech_recognition as sr
 
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -25,7 +29,7 @@ def generate_frames():
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
 # ---------------- Data loading ----------------
-def load_qa_from_csv(domain, count=5):
+def load_qa_from_csv(domain, count=3):
     """
     CSV format expected: question,answer
     Files under data/: ml_questions.csv, frontend_questions.csv, backend_questions.csv, data_analyst_questions.csv
@@ -143,8 +147,43 @@ def interview(role):
 @app.route('/get_questions/<role>')
 def get_questions(role):
     # Return objects so frontend has {question, ideal}
-    qa = load_qa_from_csv(role, count=5)  # ask 5 Qs; change to 6–8 if you like
+    qa = load_qa_from_csv(role, count=3)  # ask 5 Qs; change to 6–8 if you like
     return jsonify(qa)
+
+@app.route("/upload_audio", methods=["POST"])
+def upload_audio():
+    file = request.files.get("file")
+    ideal_answer = request.form.get("ideal_answer", "")
+
+    if not file:
+        return jsonify({"error": "No audio uploaded"}), 400
+
+    try:
+        # Convert WebM → WAV for recognition
+        audio_bytes = file.read()
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
+        wav_io = io.BytesIO()
+        audio.export(wav_io, format="wav")
+        wav_io.seek(0)
+
+        # Run STT
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_io) as source:
+            audio_data = recognizer.record(source)
+            transcript = recognizer.recognize_google(audio_data)
+
+        # Compare with ideal answer
+        score = similarity_score(transcript, ideal_answer)
+
+        return jsonify({
+            "transcript": transcript,
+            "similarity": score
+        })
+
+    except sr.UnknownValueError:
+        return jsonify({"transcript": "", "similarity": 0.0, "error": "Could not understand audio"})
+    except Exception as e:
+        return jsonify({"transcript": "", "similarity": 0.0, "error": str(e)})
 
 @app.route('/score_answer', methods=['POST'])
 def score_answer():
