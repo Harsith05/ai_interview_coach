@@ -1,5 +1,3 @@
-// interview.js — Real-time STT, scoring, and video heuristics
-
 (() => {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
@@ -8,9 +6,9 @@
   const role = window.INTERVIEW_ROLE || 'ml';
 
   const timePerQuestion = 20;   // seconds per question
-  const askCount = 5;           // reveal answers after these many questions
+  const askCount = 5;           // number of questions to ask
 
-  let questions = [];           // [{question, ideal}, ...]
+  let questions = [];           
   let currentIndex = 0;
   let countdownInterval = null;
   let running = false;
@@ -21,8 +19,8 @@
   let finalText = '';
   let liveSendInterval = null;
 
-  // collect results to reveal answers at the end
-  const results = []; // [{q, ideal, transcript, score, gaze_ok, posture_ok}, ...]
+  // collect results
+  const results = []; // [{q, ideal, transcript, score, camera_notes}, ...]
 
   // UI helpers
   function ensureBox(id, label, css = {}) {
@@ -43,7 +41,7 @@
   async function loadQuestions(role) {
     const res = await fetch(`/get_questions/${role}`);
     const data = await res.json();
-    return data.slice(0, askCount);
+    return data.slice(0, askCount); // backend returns {question, answers:[...]}
   }
 
   // TTS
@@ -77,7 +75,7 @@
     }, 1000);
   }
 
-  // Real-time STT (Web Speech API)
+  // Real-time STT
   function startSTT() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
@@ -108,10 +106,10 @@
     };
 
     recognition.onerror = (e) => console.warn('STT error:', e);
-    recognition.onend = () => {/* restarted per question */};
+    recognition.onend = () => {};
     recognition.start();
 
-    // Optional: stream partial transcript to backend (for future real-time use)
+    // Live similarity every 2s
     clearInterval(liveSendInterval);
     liveSendInterval = setInterval(() => {
       const txt = (finalText || '').trim();
@@ -121,7 +119,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             user_answer: txt,
-            ideal_answer: questions[currentIndex]?.ideal || ''
+            ideal_answers: (questions[currentIndex]?.answers || [])
           })
         }).then(r => r.json()).then(j => {
           const box = ensureBox('live_score_box', 'Live Score', { fontSize: '13px', color: '#444' });
@@ -143,7 +141,7 @@
     }
   }
 
-  // Snapshot to backend for gaze/posture every 3s while answering
+  // Snapshot to backend for gaze/posture
   let snapshotInterval = null;
   function startSnapshots() {
     const imgEl = document.getElementById('video_stream');
@@ -163,11 +161,18 @@
           const ebox = ensureBox('emotion_box', 'Camera Feedback', { fontSize: '13px' });
           const g = j.gaze_ok ? '✅' : '⚠️';
           const p = j.posture_ok ? '✅' : '⚠️';
-          ebox.innerHTML = `<strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/><em>${j.notes || ''}</em>`;
-        }).catch(() => {});
-      } catch (e) {}
-    }, 3000);
-  }
+          const em = j.emotion ? j.emotion : "Unknown";
+
+         ebox.innerHTML = `
+          <strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/>
+          <em>Emotion: ${em}</em><br/>
+          <small>${j.notes || ''}</small>
+        `;
+      })
+      .catch(() => {});
+    } catch (e) {}
+  }, 3000);
+}
   function stopSnapshots() {
     if (snapshotInterval) clearInterval(snapshotInterval);
     snapshotInterval = null;
@@ -181,45 +186,45 @@
       return;
     }
 
-    const { question, ideal } = questions[currentIndex];
+    const { question, answers } = questions[currentIndex];
     questionEl.textContent = question;
 
-    // Speak question, then start STT + timer + snapshots
+    // Speak question, then STT + timer + snapshots
     speak(question, () => {
       startSTT();
       startSnapshots();
 
       startTimer(timePerQuestion, async () => {
-        // time up for this question
         stopSTT();
         stopSnapshots();
 
-        // final transcript to score
         const user_answer = (finalText || '').trim();
         let score = 0;
         try {
           const r = await fetch('/score_answer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_answer, ideal_answer: ideal })
+            body: JSON.stringify({
+              user_answer,
+              ideal_answers: answers
+            })
           });
           const j = await r.json();
           score = j.score || 0;
-        } catch (e) { /* keep score=0 */ }
+        } catch (e) { }
 
-        // (optional) get last camera feedback shown on screen (not stored server-side per Q)
         const camBox = document.getElementById('emotion_box');
         const camText = camBox ? camBox.innerText : '';
 
         results.push({
           q: question,
-          ideal,
+          ideal: answers.join(" | "),
           transcript: user_answer,
           score,
-          camera_notes: camText
+          camera_notes: camText,
+          emotion: document.getElementById('emotion_box')?.innerText || "Unknown"
         });
 
-        // Small pause, then next
         currentIndex += 1;
         setTimeout(askCurrentQuestion, 600);
       });
@@ -233,7 +238,6 @@
     clearInterval(countdownInterval);
     try { speechSynthesis.cancel(); } catch {}
 
-    // Build summary: reveal answers now
     const box = ensureBox('summary_box', 'Summary', { fontSize: '14px', background: '#fff', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' });
     const avg = results.length ? (results.reduce((a, b) => a + b.score, 0) / results.length) : 0;
     const avgPct = Math.round(avg * 100);
@@ -245,7 +249,7 @@
           <strong>Q${i+1}:</strong> ${r.q}<br/>
           <strong>Your answer:</strong> ${r.transcript || '(no speech detected)'}<br/>
           <strong>Score:</strong> ${pct}%<br/>
-          <details><summary>Reveal ideal answer</summary>${r.ideal || '(no reference answer)'}</details>
+          <details><summary>Reveal ideal answers</summary>${(r.ideal || '').replace(/\|/g, '<br/>')}</details>
         </div>
       `;
     }).join('');
@@ -282,7 +286,7 @@
     timerEl.textContent = "--";
 
     try {
-      questions = await loadQuestions(role);    // expects [{question, ideal}, ...]
+      questions = await loadQuestions(role);
     } catch {
       questions = [];
     }
@@ -314,3 +318,4 @@
   startBtn.addEventListener('click', startInterview);
   stopBtn.addEventListener('click', stopInterview);
 })();
+

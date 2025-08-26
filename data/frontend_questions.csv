@@ -1,4 +1,3 @@
-question,answer
 What is the difference between inline, inline-blockand block elements in CSS?Inline does not start a new line and only takes needed width inline-block allows setting dimensions without line break block starts on a new line and takes full width.
 Explain the Virtual DOM in React.,The Virtual DOM is a lightweight copy of the real DOM that React uses to efficiently update UI by comparing differences and applying only necessary changes.
 What are media queries in CSS?,Media queries are CSS rules that apply styles conditionally based on device characteristics like screen width or resolution.

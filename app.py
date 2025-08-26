@@ -6,6 +6,8 @@ from Scripts.nlp_scoring import similarity_score
 import io
 from pydub import AudioSegment
 import speech_recognition as sr
+from deepface import DeepFace
+import base64
 
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -30,11 +32,6 @@ def generate_frames():
 
 # ---------------- Data loading ----------------
 def load_qa_from_csv(domain, count=3):
-    """
-    CSV format expected: question,answer
-    Files under data/: ml_questions.csv, frontend_questions.csv, backend_questions.csv, data_analyst_questions.csv
-    Returns list[ {question: str, ideal: str} ]
-    """
     domain_map = {
         'ml': 'data/ml_questions.csv',
         'frontend': 'data/frontend_questions.csv',
@@ -45,35 +42,47 @@ def load_qa_from_csv(domain, count=3):
     qa = []
     if filename:
         try:
-            with open(filename, 'r', encoding='utf-8') as f:
+            with open(filename, "r", encoding="utf-8") as f:
                 reader = csv.reader(f)
                 for row in reader:
-                    if not row or len(row) < 1:
+                    if not row or len(row) < 2:
                         continue
                     q = row[0].strip()
-                    a = row[1].strip() if len(row) > 1 else ""
-                    if q:
-                        qa.append({"question": q, "ideal": a})
+                    answers = [a.strip() for a in row[1].split("|")]
+                    qa.append({"question": q, "answers": answers})
+            print(f"✅ Loaded {len(qa)} questions from {filename}")
         except FileNotFoundError:
             print(f"[WARN] Question file not found: {filename}")
     random.shuffle(qa)
     return qa[:count]
 
 # ---------------- Simple NLP scoring ----------------
-def similarity_score(user_answer: str, ideal_answer: str) -> float:
+def similarity_score(user_answer: str, ideal_answers: list[str]):
     """
-    TF-IDF cosine similarity between user answer and ideal answer.
-    Returns 0.0 .. 1.0
+    Compare user answer against multiple ideal answers.
+    Returns: (best_score, best_match, missing_keywords)
     """
     user_answer = (user_answer or "").strip().lower()
-    ideal_answer = (ideal_answer or "").strip().lower()
-    if not user_answer or not ideal_answer:
-        return 0.0
-    vect = TfidfVectorizer(stop_words='english')
-    X = vect.fit_transform([user_answer, ideal_answer])
-    sim = cosine_similarity(X[0:1], X[1:2])[0, 0]
-    # clamp
-    return float(max(0.0, min(1.0, sim)))
+    if not user_answer or not ideal_answers:
+        return 0.0, "", []
+
+    best_score = 0.0
+    best_match = ""
+    missing_keywords = []
+
+    for ideal in ideal_answers:
+        vect = TfidfVectorizer(stop_words='english')
+        X = vect.fit_transform([user_answer, ideal.lower()])
+        sim = cosine_similarity(X[0:1], X[1:2])[0, 0]
+        if sim > best_score:
+            best_score = sim
+            best_match = ideal
+
+            # keyword check
+            words = set(ideal.lower().split())
+            missing_keywords = [w for w in words if w not in user_answer]
+
+    return float(best_score), best_match, missing_keywords
 
 # ---------------- Very light video heuristics ----------------
 # Using Haar cascades (bundled with OpenCV) to locate face & eyes.
@@ -153,7 +162,8 @@ def get_questions(role):
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
     file = request.files.get("file")
-    ideal_answer = request.form.get("ideal_answer", "")
+    # ⬇️ Now fetch multiple answers (separated by |)
+    ideal_answers = request.form.get("ideal_answers", "")
 
     if not file:
         return jsonify({"error": "No audio uploaded"}), 400
@@ -172,34 +182,70 @@ def upload_audio():
             audio_data = recognizer.record(source)
             transcript = recognizer.recognize_google(audio_data)
 
-        # Compare with ideal answer
-        score = similarity_score(transcript, ideal_answer)
+        # --- NEW: Handle multiple answers ---
+        answers_list = [ans.strip() for ans in ideal_answers.split("|") if ans.strip()]
+        sim, best_match, missing = similarity_score(transcript, answers_list)
 
         return jsonify({
             "transcript": transcript,
-            "similarity": score
+            "similarity": sim,
+            "best_match": best_match,
+            "missing_keywords": missing
         })
 
     except sr.UnknownValueError:
         return jsonify({"transcript": "", "similarity": 0.0, "error": "Could not understand audio"})
     except Exception as e:
         return jsonify({"transcript": "", "similarity": 0.0, "error": str(e)})
-
 @app.route('/score_answer', methods=['POST'])
 def score_answer():
+    
     data = request.get_json(force=True)
     user_answer = data.get("user_answer", "")
-    ideal_answer = data.get("ideal_answer", "")
-    score = similarity_score(user_answer, ideal_answer)  # 0..1
-    return jsonify({"score": score})
+    ideal_answers = data.get("ideal_answers", [])  # <-- now expects a list, not a string
+    if isinstance(ideal_answers, str):
+       ideal_answers = [a.strip() for a in ideal_answers.split("|") if a.strip()]
 
+    # run scoring against multiple answers
+    score, best_match, missing = similarity_score(user_answer, ideal_answers)
+
+    return jsonify({
+        "score": score,
+        "best_match": best_match,
+        "missing_keywords": missing
+    })
 @app.route('/analyze_frame', methods=['POST'])
 def analyze_frame():
-    payload = request.get_json(force=True)
-    data_url = payload.get("image", "")
-    result = analyze_frame_b64(data_url)
-    return jsonify(result)
+    data = request.get_json(force=True)
+    img_data = data.get("image", "")
 
+    if not img_data.startswith("data:image"):
+        return jsonify({"error": "Invalid image"}), 400
+
+    try:
+        # Decode base64 → numpy image
+        header, encoded = img_data.split(",", 1)
+        img_bytes = base64.b64decode(encoded)
+        np_arr = np.frombuffer(img_bytes, np.uint8)
+        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        # Run DeepFace emotion analysis
+        analysis = DeepFace.analyze(frame, actions=["emotion"], enforce_detection=False)
+        dominant_emotion = analysis[0]["dominant_emotion"]
+
+        # Simple posture/gaze checks (already in your code, keep them)
+        gaze_ok = True   # stub
+        posture_ok = True  # stub
+
+        return jsonify({
+            "gaze_ok": gaze_ok,
+            "posture_ok": posture_ok,
+            "emotion": dominant_emotion,
+            "notes": f"Detected emotion: {dominant_emotion}"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)})
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
