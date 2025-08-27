@@ -5,7 +5,7 @@
   const timerEl = document.getElementById('timer');
   const role = window.INTERVIEW_ROLE || 'ml';
 
-  const timePerQuestion = 20;   // seconds per question
+  const timePerQuestion = 15;   // seconds per question
   const askCount = 5;           // number of questions to ask
 
   let questions = [];           

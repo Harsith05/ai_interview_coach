@@ -8,6 +8,7 @@ from pydub import AudioSegment
 import speech_recognition as sr
 from deepface import DeepFace
 import base64
+from sentence_transformers import SentenceTransformer, util
 
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -55,7 +56,7 @@ def load_qa_from_csv(domain, count=3):
             print(f"[WARN] Question file not found: {filename}")
     random.shuffle(qa)
     return qa[:count]
-
+sem_model = SentenceTransformer('all-MiniLM-L6-v2')
 # ---------------- Simple NLP scoring ----------------
 def similarity_score(user_answer: str, ideal_answers: list[str]):
     """
@@ -66,23 +67,22 @@ def similarity_score(user_answer: str, ideal_answers: list[str]):
     if not user_answer or not ideal_answers:
         return 0.0, "", []
 
-    best_score = 0.0
-    best_match = ""
-    missing_keywords = []
+    user_emb = sem_model.encode(user_answer, convert_to_tensor=True)
+    ideal_embs = sem_model.encode(ideal_answers, convert_to_tensor=True)
 
-    for ideal in ideal_answers:
-        vect = TfidfVectorizer(stop_words='english')
-        X = vect.fit_transform([user_answer, ideal.lower()])
-        sim = cosine_similarity(X[0:1], X[1:2])[0, 0]
-        if sim > best_score:
-            best_score = sim
-            best_match = ideal
+    # Compute cosine similarities
+    sims = util.cos_sim(user_emb, ideal_embs)[0].cpu().tolist()
 
-            # keyword check
-            words = set(ideal.lower().split())
-            missing_keywords = [w for w in words if w not in user_answer]
+    # Find best match
+    best_idx = max(range(len(sims)), key=lambda i: sims[i])
+    best_score = float(sims[best_idx])
+    best_match = ideal_answers[best_idx]
 
-    return float(best_score), best_match, missing_keywords
+    # Optional: keyword check for explainability
+    words = set(best_match.lower().split())
+    missing_keywords = [w for w in words if w not in user_answer.lower()]
+
+    return best_score, best_match, missing_keywords
 
 # ---------------- Very light video heuristics ----------------
 # Using Haar cascades (bundled with OpenCV) to locate face & eyes.
