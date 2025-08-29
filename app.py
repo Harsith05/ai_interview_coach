@@ -9,6 +9,12 @@ import speech_recognition as sr
 from deepface import DeepFace
 import base64
 from sentence_transformers import SentenceTransformer, util
+import librosa , re 
+from Scripts.speech_clarity import analyze_speech_rate, analyze_pitch
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -162,41 +168,90 @@ def get_questions(role):
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
     file = request.files.get("file")
-    # ⬇️ Now fetch multiple answers (separated by |)
     ideal_answers = request.form.get("ideal_answers", "")
 
-    if not file:
-        return jsonify({"error": "No audio uploaded"}), 400
+    if not file or file.filename == "":
+        return jsonify({
+            "transcript": "",
+            "similarity": 0.0,
+            "speech_rate": 0,
+            "clarity_notes": "No audio uploaded",
+            "tone_notes": "Skipped"
+        }), 200
 
     try:
-        # Convert WebM → WAV for recognition
+        # Convert WebM → WAV
         audio_bytes = file.read()
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
         wav_io = io.BytesIO()
         audio.export(wav_io, format="wav")
         wav_io.seek(0)
 
-        # Run STT
+        # --- Speech-to-Text (FAST) ---
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
+        try:
             transcript = recognizer.recognize_google(audio_data)
+        except sr.UnknownValueError:
+            transcript = ""
 
-        # --- NEW: Handle multiple answers ---
-        answers_list = [ans.strip() for ans in ideal_answers.split("|") if ans.strip()]
-        sim, best_match, missing = similarity_score(transcript, answers_list)
+        # --- Similarity scoring (FAST) ---
+        answers_list = [a.strip() for a in ideal_answers.split("|") if a.strip()]
+        sim, best_match, missing = similarity_score(transcript, answers_list) if transcript else (0.0, "", [])
 
-        return jsonify({
+        # --- Speech clarity (FAST) ---
+        duration_min = len(audio) / (1000 * 60.0)
+        words = transcript.split()
+        wpm = len(words) / duration_min if duration_min > 0 else 0
+        if wpm == 0:
+            clarity_notes = "No words detected."
+        elif wpm < 90:
+            clarity_notes = "Too slow."
+        elif wpm > 160:
+            clarity_notes = "Too fast."
+        else:
+            clarity_notes = "Good pace ✅"
+
+        # --- Return immediately (FAST path) ---
+        response = {
             "transcript": transcript,
             "similarity": sim,
             "best_match": best_match,
-            "missing_keywords": missing
-        })
+            "missing_keywords": missing,
+            "speech_rate": wpm,
+            "clarity_notes": clarity_notes,
+            "tone_notes": "Processing..."  # placeholder
+        }
 
-    except sr.UnknownValueError:
-        return jsonify({"transcript": "", "similarity": 0.0, "error": "Could not understand audio"})
+        # --- Kick off async tone analysis in background ---
+        import threading
+        def analyze_tone_async(wav_bytes, resp):
+            try:
+                y, sr_rate = librosa.load(io.BytesIO(wav_bytes), sr=None)
+                pitches, mags = librosa.piptrack(y=y, sr=sr_rate)
+                pitch_values = pitches[mags > np.median(mags)]
+                if pitch_values.size > 0:
+                    pitch_var = float(np.var(pitch_values))
+                    tone = "Good vocal variety ✅" if pitch_var >= 100 else "Monotone tone"
+                else:
+                    tone = "Not enough pitch data"
+            except Exception:
+                tone = "Tone analysis failed"
+
+            # save somewhere (DB, cache, file) so frontend can poll
+            print(f"[Tone Analysis] {resp['transcript']} → {tone}")
+
+        threading.Thread(target=analyze_tone_async, args=(wav_io.getvalue(), response)).start()
+
+        return jsonify(response)
+
     except Exception as e:
-        return jsonify({"transcript": "", "similarity": 0.0, "error": str(e)})
+        return jsonify({"error": str(e)})
+
+
+        # --- Kick off async tone analysis in background ---
+
 @app.route('/score_answer', methods=['POST'])
 def score_answer():
     

@@ -8,7 +8,7 @@
   const timePerQuestion = 15;   // seconds per question
   const askCount = 5;           // number of questions to ask
 
-  let questions = [];           
+  let questions = [];
   let currentIndex = 0;
   let countdownInterval = null;
   let running = false;
@@ -18,6 +18,10 @@
   let interimText = '';
   let finalText = '';
   let liveSendInterval = null;
+
+  // 🎤 audio recording globals
+  let mediaRecorder;
+  let audioChunks = [];
 
   // collect results
   const results = []; // [{q, ideal, transcript, score, camera_notes}, ...]
@@ -163,16 +167,16 @@
           const p = j.posture_ok ? '✅' : '⚠️';
           const em = j.emotion ? j.emotion : "Unknown";
 
-         ebox.innerHTML = `
-          <strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/>
-          <em>Emotion: ${em}</em><br/>
-          <small>${j.notes || ''}</small>
-        `;
-      })
-      .catch(() => {});
-    } catch (e) {}
-  }, 3000);
-}
+          ebox.innerHTML = `
+            <strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/>
+            <em>Emotion: ${em}</em><br/>
+            <small>${j.notes || ''}</small>
+          `;
+        })
+        .catch(() => {});
+      } catch (e) {}
+    }, 3000);
+  }
   function stopSnapshots() {
     if (snapshotInterval) clearInterval(snapshotInterval);
     snapshotInterval = null;
@@ -189,6 +193,18 @@
     const { question, answers } = questions[currentIndex];
     questionEl.textContent = question;
 
+    // 🎤 Start recording
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = e => {
+          if (e.data.size > 0) audioChunks.push(e.data);
+        };
+        mediaRecorder.start();
+      })
+      .catch(err => console.error("Mic error:", err));
+
     // Speak question, then STT + timer + snapshots
     speak(question, () => {
       startSTT();
@@ -199,34 +215,61 @@
         stopSnapshots();
 
         const user_answer = (finalText || '').trim();
+
+        // prepare vars for voice analysis
         let score = 0;
+        let transcript = user_answer;
+        let speechRate = "N/A";
+        let clarity = "";
+        let tone = "";
+
         try {
-          const r = await fetch('/score_answer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              user_answer,
-              ideal_answers: answers
-            })
-          });
+          // ⏹️ stop recording and build blob
+          if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            await new Promise(resolve => {
+              mediaRecorder.onstop = resolve;
+              mediaRecorder.stop();
+            });
+          }
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+          // send audio + answers
+          const formData = new FormData();
+          formData.append("file", audioBlob, "answer.webm");
+          formData.append("ideal_answers", answers.join("|"));
+
+          const r = await fetch("/upload_audio", { method: "POST", body: formData });
           const j = await r.json();
-          score = j.score || 0;
-        } catch (e) { }
+
+          score = j.similarity || 0;
+          transcript = j.transcript || user_answer;
+          speechRate = (j.speech_rate && !isNaN(j.speech_rate))
+            ? `${j.speech_rate.toFixed(1)} WPM`
+            : "N/A";
+          clarity = j.clarity_notes || "";
+          tone = j.tone_notes || "";
+        } catch (e) {
+          console.warn("Audio analysis failed", e);
+        }
 
         const camBox = document.getElementById('emotion_box');
         const camText = camBox ? camBox.innerText : '';
 
+        // ✅ push safe object into results
         results.push({
           q: question,
           ideal: answers.join(" | "),
-          transcript: user_answer,
+          transcript,
           score,
           camera_notes: camText,
-          emotion: document.getElementById('emotion_box')?.innerText || "Unknown"
+          emotion: document.getElementById('emotion_box')?.innerText || "Unknown",
+          speech_rate: speechRate,
+          clarity_notes: clarity,
+          tone_notes: tone
         });
 
         currentIndex += 1;
-        setTimeout(askCurrentQuestion, 600);
+        askCurrentQuestion();
       });
     });
   }
@@ -249,6 +292,9 @@
           <strong>Q${i+1}:</strong> ${r.q}<br/>
           <strong>Your answer:</strong> ${r.transcript || '(no speech detected)'}<br/>
           <strong>Score:</strong> ${pct}%<br/>
+          <strong>Speech Rate:</strong> ${r.speech_rate || 'N/A'}<br/>
+          <strong>Clarity:</strong> ${r.clarity_notes || ''}<br/>
+          <strong>Tone:</strong> ${r.tone_notes || ''}<br/>
           <details><summary>Reveal ideal answers</summary>${(r.ideal || '').replace(/\|/g, '<br/>')}</details>
         </div>
       `;
@@ -318,4 +364,3 @@
   startBtn.addEventListener('click', startInterview);
   stopBtn.addEventListener('click', stopInterview);
 })();
-
