@@ -180,14 +180,14 @@ def upload_audio():
         }), 200
 
     try:
-        # Convert WebM → WAV
+        # WebM → WAV
         audio_bytes = file.read()
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
         wav_io = io.BytesIO()
         audio.export(wav_io, format="wav")
         wav_io.seek(0)
 
-        # --- Speech-to-Text (FAST) ---
+        # STT
         recognizer = sr.Recognizer()
         with sr.AudioFile(wav_io) as source:
             audio_data = recognizer.record(source)
@@ -196,15 +196,17 @@ def upload_audio():
         except sr.UnknownValueError:
             transcript = ""
 
-        # --- Similarity scoring (FAST) ---
+        # Similarity scoring
         answers_list = [a.strip() for a in ideal_answers.split("|") if a.strip()]
         sim, best_match, missing = similarity_score(transcript, answers_list) if transcript else (0.0, "", [])
+        #sim_pct = round(sim * 100, 1)
 
-        # --- Speech clarity (FAST) ---
+        # Speech rate
         duration_min = len(audio) / (1000 * 60.0)
         words = transcript.split()
-        wpm = len(words) / duration_min if duration_min > 0 else 0
-        if wpm == 0:
+        wpm = round(len(words) / duration_min, 1) if duration_min > 0 else 0
+
+        if not transcript.strip():
             clarity_notes = "No words detected."
         elif wpm < 90:
             clarity_notes = "Too slow."
@@ -213,7 +215,6 @@ def upload_audio():
         else:
             clarity_notes = "Good pace ✅"
 
-        # --- Return immediately (FAST path) ---
         response = {
             "transcript": transcript,
             "similarity": sim,
@@ -221,10 +222,10 @@ def upload_audio():
             "missing_keywords": missing,
             "speech_rate": wpm,
             "clarity_notes": clarity_notes,
-            "tone_notes": "Processing..."  # placeholder
+            "tone_notes": "Processing..."  # async
         }
 
-        # --- Kick off async tone analysis in background ---
+        # Async tone analysis
         import threading
         def analyze_tone_async(wav_bytes, resp):
             try:
@@ -238,8 +239,6 @@ def upload_audio():
                     tone = "Not enough pitch data"
             except Exception:
                 tone = "Tone analysis failed"
-
-            # save somewhere (DB, cache, file) so frontend can poll
             print(f"[Tone Analysis] {resp['transcript']} → {tone}")
 
         threading.Thread(target=analyze_tone_async, args=(wav_io.getvalue(), response)).start()
@@ -247,14 +246,13 @@ def upload_audio():
         return jsonify(response)
 
     except Exception as e:
-        return jsonify({"error": str(e)})
-
+        return jsonify({"transcript": "", "similarity": 0.0, "speech_rate": 0, "clarity_notes": "Error", "tone_notes": "Error", "error": str(e)})
 
         # --- Kick off async tone analysis in background ---
 
 @app.route('/score_answer', methods=['POST'])
 def score_answer():
-    
+
     data = request.get_json(force=True)
     user_answer = data.get("user_answer", "")
     ideal_answers = data.get("ideal_answers", [])  # <-- now expects a list, not a string

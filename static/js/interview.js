@@ -6,7 +6,7 @@
   const role = window.INTERVIEW_ROLE || 'ml';
 
   const timePerQuestion = 15;   // seconds per question
-  const askCount = 5;           // number of questions to ask
+  const askCount = 3;           // number of questions to ask
 
   let questions = [];
   let currentIndex = 0;
@@ -19,14 +19,13 @@
   let finalText = '';
   let liveSendInterval = null;
 
-  // 🎤 audio recording globals
+  // audio recording
   let mediaRecorder;
   let audioChunks = [];
 
   // collect results
-  const results = []; // [{q, ideal, transcript, score, camera_notes}, ...]
+  const results = [];
 
-  // UI helpers
   function ensureBox(id, label, css = {}) {
     let el = document.getElementById(id);
     if (!el) {
@@ -41,17 +40,14 @@
     return el;
   }
 
-  // Load questions
   async function loadQuestions(role) {
     const res = await fetch(`/get_questions/${role}`);
     const data = await res.json();
-    return data.slice(0, askCount); // backend returns {question, answers:[...]}
+    return data.slice(0, askCount);
   }
 
-  // TTS
   function speak(text, onend) {
     if (!('speechSynthesis' in window)) {
-      console.warn('speechSynthesis not supported');
       if (onend) onend();
       return;
     }
@@ -63,7 +59,6 @@
     speechSynthesis.speak(u);
   }
 
-  // Timer
   function startTimer(s, onUp) {
     let left = s;
     clearInterval(countdownInterval);
@@ -79,18 +74,13 @@
     }, 1000);
   }
 
-  // Real-time STT
   function startSTT() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      console.warn('SpeechRecognition not supported in this browser.');
-      return;
-    }
+    if (!SR) return;
     recognition = new SR();
     recognition.lang = 'en-US';
     recognition.interimResults = true;
     recognition.continuous = true;
-
     finalText = '';
     interimText = '';
 
@@ -100,11 +90,8 @@
       let interim = '';
       for (let i = evt.resultIndex; i < evt.results.length; i++) {
         const res = evt.results[i];
-        if (res.isFinal) {
-          finalText += res[0].transcript + ' ';
-        } else {
-          interim += res[0].transcript;
-        }
+        if (res.isFinal) finalText += res[0].transcript + ' ';
+        else interim += res[0].transcript;
       }
       liveBox.innerHTML = `<strong>Live Transcript:</strong> ${finalText}${interim}`;
     };
@@ -113,7 +100,6 @@
     recognition.onend = () => {};
     recognition.start();
 
-    // Live similarity every 2s
     clearInterval(liveSendInterval);
     liveSendInterval = setInterval(() => {
       const txt = (finalText || '').trim();
@@ -127,7 +113,9 @@
           })
         }).then(r => r.json()).then(j => {
           const box = ensureBox('live_score_box', 'Live Score', { fontSize: '13px', color: '#444' });
-          const pct = Math.round((j.score || 0) * 100);
+          // Make sure similarity is 0–1 before multiplying
+          const sim = parseFloat(j.score || j.similarity || 0);
+          const pct = Math.round(sim * 100);
           box.innerHTML = `<strong>Live Similarity:</strong> ${pct}%`;
         }).catch(() => {});
       }
@@ -139,13 +127,10 @@
       try { recognition.stop(); } catch {}
       recognition = null;
     }
-    if (liveSendInterval) {
-      clearInterval(liveSendInterval);
-      liveSendInterval = null;
-    }
+    if (liveSendInterval) clearInterval(liveSendInterval);
+    liveSendInterval = null;
   }
 
-  // Snapshot to backend for gaze/posture
   let snapshotInterval = null;
   function startSnapshots() {
     const imgEl = document.getElementById('video_stream');
@@ -166,113 +151,105 @@
           const g = j.gaze_ok ? '✅' : '⚠️';
           const p = j.posture_ok ? '✅' : '⚠️';
           const em = j.emotion ? j.emotion : "Unknown";
-
-          ebox.innerHTML = `
-            <strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/>
-            <em>Emotion: ${em}</em><br/>
-            <small>${j.notes || ''}</small>
-          `;
-        })
-        .catch(() => {});
+          ebox.innerHTML = `<strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/><em>Emotion: ${em}</em><br/><small>${j.notes || ''}</small>`;
+        }).catch(() => {});
       } catch (e) {}
     }, 3000);
   }
+
   function stopSnapshots() {
     if (snapshotInterval) clearInterval(snapshotInterval);
     snapshotInterval = null;
   }
-
-  // Ask the current question
-  function askCurrentQuestion() {
-    if (!running) return;
-    if (currentIndex >= questions.length) {
-      finishInterview();
-      return;
-    }
-
-    const { question, answers } = questions[currentIndex];
-    questionEl.textContent = question;
-
-    // 🎤 Start recording
-    navigator.mediaDevices.getUserMedia({ audio: true })
-      .then(stream => {
-        mediaRecorder = new MediaRecorder(stream);
-        audioChunks = [];
-        mediaRecorder.ondataavailable = e => {
-          if (e.data.size > 0) audioChunks.push(e.data);
-        };
-        mediaRecorder.start();
-      })
-      .catch(err => console.error("Mic error:", err));
-
-    // Speak question, then STT + timer + snapshots
-    speak(question, () => {
-      startSTT();
-      startSnapshots();
-
-      startTimer(timePerQuestion, async () => {
-        stopSTT();
-        stopSnapshots();
-
-        const user_answer = (finalText || '').trim();
-
-        // prepare vars for voice analysis
-        let score = 0;
-        let transcript = user_answer;
-        let speechRate = "N/A";
-        let clarity = "";
-        let tone = "";
-
-        try {
-          // ⏹️ stop recording and build blob
-          if (mediaRecorder && mediaRecorder.state !== "inactive") {
-            await new Promise(resolve => {
-              mediaRecorder.onstop = resolve;
-              mediaRecorder.stop();
-            });
-          }
-          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-
-          // send audio + answers
-          const formData = new FormData();
-          formData.append("file", audioBlob, "answer.webm");
-          formData.append("ideal_answers", answers.join("|"));
-
-          const r = await fetch("/upload_audio", { method: "POST", body: formData });
-          const j = await r.json();
-
-          score = j.similarity || 0;
-          transcript = j.transcript || user_answer;
-          speechRate = (j.speech_rate && !isNaN(j.speech_rate))
-            ? `${j.speech_rate.toFixed(1)} WPM`
-            : "N/A";
-          clarity = j.clarity_notes || "";
-          tone = j.tone_notes || "";
-        } catch (e) {
-          console.warn("Audio analysis failed", e);
-        }
-
-        const camBox = document.getElementById('emotion_box');
-        const camText = camBox ? camBox.innerText : '';
-
-        // ✅ push safe object into results
-        results.push({
-          q: question,
-          ideal: answers.join(" | "),
-          transcript,
-          score,
-          camera_notes: camText,
-          emotion: document.getElementById('emotion_box')?.innerText || "Unknown",
-          speech_rate: speechRate,
-          clarity_notes: clarity,
-          tone_notes: tone
-        });
-
-        currentIndex += 1;
-        askCurrentQuestion();
-      });
-    });
+async function askCurrentQuestion() {
+  if (!running) return;
+  if (currentIndex >= questions.length) {
+    finishInterview();
+    return;
   }
+
+  const { question, answers } = questions[currentIndex];
+  questionEl.textContent = question;
+
+  // Start audio recording
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+    mediaRecorder.start();
+  } catch (err) {
+    console.error("Mic error:", err);
+  }
+
+  // Speak the question, then start STT + snapshots
+  speak(question, () => {
+    startSTT();
+    startSnapshots();
+
+    startTimer(timePerQuestion, async () => {
+      stopSTT();
+      stopSnapshots();
+
+      const user_answer = (finalText || '').trim();
+      let score = 0;
+      let transcript = user_answer;
+      let speechRate = "N/A";
+      let clarity = "";
+      let tone = "";
+
+      try {
+        // Stop recording
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          await new Promise(resolve => {
+            mediaRecorder.onstop = resolve;
+            mediaRecorder.stop();
+          });
+        }
+        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+        // Send audio + ideal answers
+        const formData = new FormData();
+        formData.append("file", audioBlob, "answer.webm");
+        formData.append("ideal_answers", answers.join("|"));
+
+        const r = await fetch("/upload_audio", { method: "POST", body: formData });
+        const j = await r.json();
+
+        // Parse similarity correctly
+        score = parseFloat(j.similarity || 0); // keep 0-1
+        transcript = j.transcript || user_answer;
+        speechRate = (j.speech_rate && !isNaN(j.speech_rate)) ? `${j.speech_rate.toFixed(1)} WPM` : "N/A";
+        clarity = j.clarity_notes || "";
+        tone = j.tone_notes || "";
+
+      } catch (e) {
+        console.warn("Audio analysis failed", e);
+      }
+
+      const camText = document.getElementById('emotion_box')?.innerText || "Unknown";
+
+      // Store result
+      results.push({
+        q: question,
+        ideal: answers.join(" | "),
+        transcript,
+        score,
+        camera_notes: camText,
+        emotion: camText,
+        speech_rate: speechRate,
+        clarity_notes: clarity,
+        tone_notes: tone
+      });
+
+      currentIndex += 1;
+      askCurrentQuestion(); // small delay before next
+    });
+  });
+}
+
 
   function finishInterview() {
     running = false;
@@ -283,21 +260,19 @@
 
     const box = ensureBox('summary_box', 'Summary', { fontSize: '14px', background: '#fff', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' });
     const avg = results.length ? (results.reduce((a, b) => a + b.score, 0) / results.length) : 0;
-    const avgPct = Math.round(avg * 100);
+    const avgPct = Math.round(avg * 100); // ✅ multiply once here
 
     const lines = results.map((r, i) => {
       const pct = Math.round(r.score * 100);
-      return `
-        <div style="margin-bottom:10px;">
-          <strong>Q${i+1}:</strong> ${r.q}<br/>
-          <strong>Your answer:</strong> ${r.transcript || '(no speech detected)'}<br/>
-          <strong>Score:</strong> ${pct}%<br/>
-          <strong>Speech Rate:</strong> ${r.speech_rate || 'N/A'}<br/>
-          <strong>Clarity:</strong> ${r.clarity_notes || ''}<br/>
-          <strong>Tone:</strong> ${r.tone_notes || ''}<br/>
-          <details><summary>Reveal ideal answers</summary>${(r.ideal || '').replace(/\|/g, '<br/>')}</details>
-        </div>
-      `;
+      return `<div style="margin-bottom:10px;">
+        <strong>Q${i+1}:</strong> ${r.q}<br/>
+        <strong>Your answer:</strong> ${r.transcript || '(no speech detected)'}<br/>
+        <strong>Score:</strong> ${pct}%<br/>
+        <strong>Speech Rate:</strong> ${r.speech_rate || 'N/A'}<br/>
+        <strong>Clarity:</strong> ${r.clarity_notes || ''}<br/>
+        <strong>Tone:</strong> ${r.tone_notes || ''}<br/>
+        <details><summary>Reveal ideal answers</summary>${(r.ideal || '').replace(/\|/g, '<br/>')}</details>
+      </div>`;
     }).join('');
 
     const suggestions = [
@@ -307,17 +282,13 @@
       "Speak clearly at a steady pace; pause briefly before key points."
     ];
 
-    box.innerHTML = `
-      <div><strong>Interview complete.</strong> Average similarity: <strong>${avgPct}%</strong></div>
-      <hr/>
-      ${lines}
-      <hr/>
+    box.innerHTML = `<div><strong>Interview complete.</strong> Average similarity: <strong>${avgPct}%</strong></div>
+      <hr/>${lines}<hr/>
       <div><strong>Feedback:</strong>
         <ul style="margin-top:6px;text-align:left;">
           ${suggestions.map(s => `<li>${s}</li>`).join('')}
         </ul>
-      </div>
-    `;
+      </div>`;
 
     questionEl.textContent = "Interview complete. Review your feedback below.";
     timerEl.textContent = "--";
@@ -360,7 +331,7 @@
     timerEl.textContent = "--";
   }
 
-  // events
   startBtn.addEventListener('click', startInterview);
   stopBtn.addEventListener('click', stopInterview);
 })();
+
