@@ -251,7 +251,7 @@ async function askCurrentQuestion() {
 }
 
 
-  function finishInterview() {
+  async function finishInterview() {
     running = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
@@ -275,20 +275,27 @@ async function askCurrentQuestion() {
       </div>`;
     }).join('');
 
-    const suggestions = [
-      avg < 0.6 ? "Try structuring answers with a brief definition, 2–3 key points, and an example." : "Great content coverage—keep adding concise examples.",
-      "Maintain eye contact with the camera and stay centered in frame.",
-      "Sit upright; keep shoulders open; minimize fidgeting.",
-      "Speak clearly at a steady pace; pause briefly before key points."
-    ];
+    const feedbackResp = await fetch('/generate_feedback', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    answer: results.map(r => r.transcript).join("\n"),
+    similarity: avg,
+    emotion: results.map(r => r.emotion).join(", "),
+    voice_tone: results.map(r => r.tone_notes).join(", "),
+    eye_gaze: results.map(r => r.camera_notes).join(", ")
+  })
+});
+const feedbackData = await feedbackResp.json();
+const llmFeedback = feedbackData.feedback || "No feedback generated.";
+
 
     box.innerHTML = `<div><strong>Interview complete.</strong> Average similarity: <strong>${avgPct}%</strong></div>
-      <hr/>${lines}<hr/>
-      <div><strong>Feedback:</strong>
-        <ul style="margin-top:6px;text-align:left;">
-          ${suggestions.map(s => `<li>${s}</li>`).join('')}
-        </ul>
-      </div>`;
+  <hr/>${lines}<hr/>
+  <div><strong>Feedback:</strong>
+    <p>${llmFeedback}</p>
+  </div>`;
+
 
     questionEl.textContent = "Interview complete. Review your feedback below.";
     timerEl.textContent = "--";

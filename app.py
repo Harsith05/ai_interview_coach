@@ -15,15 +15,19 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
+import google.generativeai as genai
+from Scripts.configure import GEMINI_API_KEY
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 app = Flask(__name__)
 
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
 # ---------------- Webcam stream ----------------
 camera = cv2.VideoCapture(0)
+
 
 def generate_frames():
     while True:
@@ -299,6 +303,36 @@ def analyze_frame():
 
     except Exception as e:
         return jsonify({"error": str(e)})
+@app.route("/generate_feedback", methods=["POST"])
+def generate_feedback():
+    data = request.json
+    user_answer = data.get("answer", "")
+    similarity = data.get("similarity", 0)
+    emotion = data.get("emotion", "")
+    voice_tone = data.get("voice_tone", "")
+    eye_gaze = data.get("eye_gaze", "")
+
+    prompt = f"""
+    You are an AI interview coach. Based on the candidate's response, 
+    provide constructive feedback.
+
+    Candidate Answer: {user_answer}
+    Similarity Score: {similarity}
+    Emotional Analysis: {emotion}
+    Voice Tone: {voice_tone}
+    Eye Gaze: {eye_gaze}
+
+    Give clear and encouraging feedback on:
+    1. Answer content quality
+    2. Confidence and tone
+    3. Body language (eye gaze)
+    4. Suggestions for improvement
+    """
+
+    response = model.generate_content(prompt)
+    feedback = response.text if response and hasattr(response, "text") else "No feedback generated."
+
+    return jsonify({"feedback": feedback})
 @app.route('/video_feed')
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
