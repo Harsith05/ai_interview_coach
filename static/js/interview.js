@@ -1,6 +1,7 @@
 (() => {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
+  const nextBtn = document.getElementById('nextBtn'); // NEW next button
   const questionEl = document.getElementById('question');
   const timerEl = document.getElementById('timer');
   const role = window.INTERVIEW_ROLE || 'ml';
@@ -113,7 +114,6 @@
           })
         }).then(r => r.json()).then(j => {
           const box = ensureBox('live_score_box', 'Live Score', { fontSize: '13px', color: '#444' });
-          // Make sure similarity is 0–1 before multiplying
           const sim = parseFloat(j.score || j.similarity || 0);
           const pct = Math.round(sim * 100);
           box.innerHTML = `<strong>Live Similarity:</strong> ${pct}%`;
@@ -161,106 +161,117 @@
     if (snapshotInterval) clearInterval(snapshotInterval);
     snapshotInterval = null;
   }
-async function askCurrentQuestion() {
-  if (!running) return;
-  if (currentIndex >= questions.length) {
-    finishInterview();
-    return;
-  }
 
-  const { question, answers } = questions[currentIndex];
-  questionEl.textContent = question;
+  // ------------------------------
+  // Next Button Handler
+  // ------------------------------
+  async function nextQuestionManually() {
+    if (!running) return;
+    clearInterval(countdownInterval);
+    stopSTT();
+    stopSnapshots();
 
-  // Start audio recording
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => {
-      if (e.data.size > 0) audioChunks.push(e.data);
-    };
-    mediaRecorder.start();
-  } catch (err) {
-    console.error("Mic error:", err);
-  }
+    const user_answer = (finalText || '').trim();
+    let score = 0;
+    let transcript = user_answer;
+    let speechRate = "N/A";
+    let clarity = "";
+    let tone = "";
 
-  // Speak the question, then start STT + snapshots
-  speak(question, () => {
-    startSTT();
-    startSnapshots();
-
-    startTimer(timePerQuestion, async () => {
-      stopSTT();
-      stopSnapshots();
-
-      const user_answer = (finalText || '').trim();
-      let score = 0;
-      let transcript = user_answer;
-      let speechRate = "N/A";
-      let clarity = "";
-      let tone = "";
-
-      try {
-        // Stop recording
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-          await new Promise(resolve => {
-            mediaRecorder.onstop = resolve;
-            mediaRecorder.stop();
-          });
-        }
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-
-        // Send audio + ideal answers
-        const formData = new FormData();
-        formData.append("file", audioBlob, "answer.webm");
-        formData.append("ideal_answers", answers.join("|"));
-
-        const r = await fetch("/upload_audio", { method: "POST", body: formData });
-        const j = await r.json();
-
-        // Parse similarity correctly
-        score = parseFloat(j.similarity || 0); // keep 0-1
-        transcript = j.transcript || user_answer;
-        speechRate = (j.speech_rate && !isNaN(j.speech_rate)) ? `${j.speech_rate.toFixed(1)} WPM` : "N/A";
-        clarity = j.clarity_notes || "";
-        tone = j.tone_notes || "";
-
-      } catch (e) {
-        console.warn("Audio analysis failed", e);
+    try {
+      if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        await new Promise(resolve => {
+          mediaRecorder.onstop = resolve;
+          mediaRecorder.stop();
+        });
       }
+      const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+      const formData = new FormData();
+      formData.append("file", audioBlob, "answer.webm");
+      formData.append("ideal_answers", (questions[currentIndex]?.answers || []).join("|"));
+      const r = await fetch("/upload_audio", { method: "POST", body: formData });
+      const j = await r.json();
+      score = parseFloat(j.similarity || 0);
+      transcript = j.transcript || user_answer;
+      speechRate = (j.speech_rate && !isNaN(j.speech_rate)) ? `${j.speech_rate.toFixed(1)} WPM` : "N/A";
+      clarity = j.clarity_notes || "";
+      tone = j.tone_notes || "";
+    } catch (e) {
+      console.warn("Audio analysis failed", e);
+    }
 
-      const camText = document.getElementById('emotion_box')?.innerText || "Unknown";
+    const camText = document.getElementById('emotion_box')?.innerText || "Unknown";
 
-      // Store result
-      results.push({
-        q: question,
-        ideal: answers.join(" | "),
-        transcript,
-        score,
-        camera_notes: camText,
-        emotion: camText,
-        speech_rate: speechRate,
-        clarity_notes: clarity,
-        tone_notes: tone
-      });
-
-      currentIndex += 1;
-      askCurrentQuestion(); // small delay before next
+    results.push({
+      q: questions[currentIndex].question,
+      ideal: questions[currentIndex].answers.join(" | "),
+      transcript,
+      score,
+      camera_notes: camText,
+      emotion: camText,
+      speech_rate: speechRate,
+      clarity_notes: clarity,
+      tone_notes: tone
     });
-  });
-}
 
+    currentIndex += 1;
+    nextBtn.disabled = true;
+    askCurrentQuestion();
+  }
 
+  // ------------------------------
+  // Main Question Logic
+  // ------------------------------
+  async function askCurrentQuestion() {
+    if (!running) return;
+    if (currentIndex >= questions.length) {
+      finishInterview();
+      return;
+    }
+
+    const { question, answers } = questions[currentIndex];
+    questionEl.textContent = question;
+
+    nextBtn.disabled = false; // Enable Next while question is active
+
+    // Start audio recording
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+      mediaRecorder.ondataavailable = e => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+      mediaRecorder.start();
+    } catch (err) {
+      console.error("Mic error:", err);
+    }
+
+    // Speak the question, then start STT + snapshots
+    speak(question, () => {
+      startSTT();
+      startSnapshots();
+
+      startTimer(timePerQuestion, async () => {
+        await nextQuestionManually(); // Timer also uses same handler
+      });
+    });
+  }
+
+  // ------------------------------
+  // Finish Interview
+  // ------------------------------
   async function finishInterview() {
     running = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    nextBtn.disabled = true;
     clearInterval(countdownInterval);
     try { speechSynthesis.cancel(); } catch {}
 
     const box = ensureBox('summary_box', 'Summary', { fontSize: '14px', background: '#fff', padding: '10px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' });
     const avg = results.length ? (results.reduce((a, b) => a + b.score, 0) / results.length) : 0;
-    const avgPct = Math.round(avg * 100); // ✅ multiply once here
+    const avgPct = Math.round(avg * 100);
 
     const lines = results.map((r, i) => {
       const pct = Math.round(r.score * 100);
@@ -276,26 +287,24 @@ async function askCurrentQuestion() {
     }).join('');
 
     const feedbackResp = await fetch('/generate_feedback', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    answer: results.map(r => r.transcript).join("\n"),
-    similarity: avg,
-    emotion: results.map(r => r.emotion).join(", "),
-    voice_tone: results.map(r => r.tone_notes).join(", "),
-    eye_gaze: results.map(r => r.camera_notes).join(", ")
-  })
-});
-const feedbackData = await feedbackResp.json();
-const llmFeedback = feedbackData.feedback || "No feedback generated.";
-
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        answer: results.map(r => r.transcript).join("\n"),
+        similarity: avg,
+        emotion: results.map(r => r.emotion).join(", "),
+        voice_tone: results.map(r => r.tone_notes).join(", "),
+        eye_gaze: results.map(r => r.camera_notes).join(", ")
+      })
+    });
+    const feedbackData = await feedbackResp.json();
+    const llmFeedback = feedbackData.feedback || "No feedback generated.";
 
     box.innerHTML = `<div><strong>Interview complete.</strong> Average similarity: <strong>${avgPct}%</strong></div>
-  <hr/>${lines}<hr/>
-  <div><strong>Feedback:</strong>
-    <p>${llmFeedback}</p>
-  </div>`;
-
+      <hr/>${lines}<hr/>
+      <div><strong>Feedback:</strong>
+        <p>${llmFeedback}</p>
+      </div>`;
 
     questionEl.textContent = "Interview complete. Review your feedback below.";
     timerEl.textContent = "--";
@@ -306,6 +315,7 @@ const llmFeedback = feedbackData.feedback || "No feedback generated.";
     running = true;
     startBtn.disabled = true;
     stopBtn.disabled = false;
+    nextBtn.disabled = true;
     questionEl.textContent = "Preparing interview...";
     timerEl.textContent = "--";
 
@@ -330,6 +340,7 @@ const llmFeedback = feedbackData.feedback || "No feedback generated.";
     running = false;
     startBtn.disabled = false;
     stopBtn.disabled = true;
+    nextBtn.disabled = true;
     clearInterval(countdownInterval);
     stopSTT();
     stopSnapshots();
@@ -338,7 +349,8 @@ const llmFeedback = feedbackData.feedback || "No feedback generated.";
     timerEl.textContent = "--";
   }
 
+  // Event Listeners
   startBtn.addEventListener('click', startInterview);
   stopBtn.addEventListener('click', stopInterview);
+  nextBtn.addEventListener('click', nextQuestionManually); // NEW
 })();
-
