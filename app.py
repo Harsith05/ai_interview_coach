@@ -20,6 +20,11 @@ from Scripts.configure import GEMINI_API_KEY
 # --- NLP scoring (TF-IDF cosine) ---
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import mediapipe as mp 
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refine_landmarks=True)
+
+
 
 app = Flask(__name__)
 
@@ -99,56 +104,7 @@ def similarity_score(user_answer: str, ideal_answers: list[str]):
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 eye_cascade  = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
 
-def analyze_frame_b64(data_url: str):
-    """
-    Expects data_url like 'data:image/jpeg;base64,...'
-    Returns dict with gaze_ok, posture_ok, notes
-    Heuristics:
-      - gaze_ok: eyes detected and face center near frame center
-      - posture_ok: face size reasonable (not too close/far), basically upright bbox
-    """
-    try:
-        header, b64 = data_url.split(',', 1)
-        img_bytes = base64.b64decode(b64)
-        img_arr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
-        if img is None:
-            return {"gaze_ok": False, "posture_ok": False, "notes": "Could not decode image"}
 
-        h, w = img.shape[:2]
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.2, 5)
-
-        if len(faces) == 0:
-            return {"gaze_ok": False, "posture_ok": False, "notes": "No face detected; look toward camera and ensure lighting"}
-
-        # Choose largest face
-        faces = sorted(faces, key=lambda r: r[2]*r[3], reverse=True)
-        (x, y, fw, fh) = faces[0]
-        face_center = (x + fw/2, y + fh/2)
-        frame_center = (w/2, h/2)
-        center_dx = abs(face_center[0] - frame_center[0]) / (w/2)
-        center_dy = abs(face_center[1] - frame_center[1]) / (h/2)
-
-        # eyes detection for gaze
-        roi_gray = gray[y:y+fh, x:x+fw]
-        eyes = eye_cascade.detectMultiScale(roi_gray, 1.2, 5)
-
-        gaze_ok = (len(eyes) >= 1) and (center_dx < 0.35) and (center_dy < 0.35)
-
-        # posture proxy: face size proportion should be within limits
-        face_area_ratio = (fw * fh) / float(w * h)
-        posture_ok = 0.03 <= face_area_ratio <= 0.45  # rough bounds: not too far/close
-
-        notes = []
-        if not gaze_ok:
-            notes.append("Keep your eyes toward the camera; center your face in the frame.")
-        if not posture_ok:
-            notes.append("Adjust distance to the camera; keep an upright posture.")
-
-        return {"gaze_ok": bool(gaze_ok), "posture_ok": bool(posture_ok), "notes": " ".join(notes) or "Good camera presence"}
-    except Exception as e:
-        return {"gaze_ok": False, "posture_ok": False, "notes": f"Error analyzing frame: {e}"}
 
 # ---------------- Routes ----------------
 
@@ -273,36 +229,76 @@ def score_answer():
     })
 @app.route('/analyze_frame', methods=['POST'])
 def analyze_frame():
-    data = request.get_json(force=True)
-    img_data = data.get("image", "")
+    data = request.json
+    image_data = data["image"]
 
-    if not img_data.startswith("data:image"):
-        return jsonify({"error": "Invalid image"}), 400
+    # Decode base64 → numpy array
+    img_bytes = base64.b64decode(image_data.split(",")[1])
+    img_array = np.frombuffer(img_bytes, np.uint8)
+    frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
+    # --- Gaze & Posture ---
+    gaze = "Unknown"
+    posture = "Unknown"
+    if face_mesh:
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = face_mesh.process(rgb_frame)
+        if results.multi_face_landmarks:
+            landmarks = results.multi_face_landmarks[0].landmark
+
+            # Eye landmarks (iris center and eye corners)
+            left_iris = landmarks[468]  # center of left iris
+            right_iris = landmarks[473] # center of right iris
+            left_eye_left = landmarks[33]
+            left_eye_right = landmarks[133]
+
+            # Compute horizontal ratio for left eye
+            eye_width = left_eye_right.x - left_eye_left.x
+            iris_pos = (left_iris.x - left_eye_left.x) / (eye_width + 1e-6)
+
+            if iris_pos < 0.35:
+                gaze = "Looking Left"
+            elif iris_pos > 0.65:
+                gaze = "Looking Right"
+            else:
+                gaze = "Forward"
+
+            # Posture check (nose vs chin)
+            nose = np.array([landmarks[1].x, landmarks[1].y])
+            chin = np.array([landmarks[152].x, landmarks[152].y])
+            posture = "Straight" if chin[1] - nose[1] > 0.1 else "Slouched"
+
+    # --- Emotion with DeepFace ---
+    emotion = "Unknown"
     try:
-        # Decode base64 → numpy image
-        header, encoded = img_data.split(",", 1)
-        img_bytes = base64.b64decode(encoded)
-        np_arr = np.frombuffer(img_bytes, np.uint8)
-        frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-        # Run DeepFace emotion analysis
-        analysis = DeepFace.analyze(frame, actions=["emotion"], enforce_detection=False)
-        dominant_emotion = analysis[0]["dominant_emotion"]
-
-        # Simple posture/gaze checks (already in your code, keep them)
-        gaze_ok = True   # stub
-        posture_ok = True  # stub
-
-        return jsonify({
-            "gaze_ok": gaze_ok,
-            "posture_ok": posture_ok,
-            "emotion": dominant_emotion,
-            "notes": f"Detected emotion: {dominant_emotion}"
-        })
-
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        face_results = face_cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50)
+        )
+        if len(face_results) > 0:
+            (x, y, w_face, h_face) = face_results[0]
+            face_crop = frame[y:y+h_face, x:x+w_face]
+            analysis = DeepFace.analyze(
+                face_crop, actions=["emotion"], enforce_detection=False
+            )
+            emotion = analysis[0]["dominant_emotion"]
     except Exception as e:
-        return jsonify({"error": str(e)})
+        print("DeepFace error:", e)
+
+    # --- Notes ---
+    notes = data.get("notes", [])
+    if isinstance(notes, str):
+        notes = [notes]
+
+    # ✅ return format matches interview.js
+    return jsonify({
+        "gaze_ok": (gaze == "Forward"),
+        "posture_ok": (posture == "Straight"),
+        "emotion": emotion,
+        "gaze": gaze,
+        "notes": " ".join(notes)
+    })
+
 @app.route("/generate_feedback", methods=["POST"])
 def generate_feedback():
     data = request.json

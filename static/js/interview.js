@@ -1,7 +1,7 @@
 (() => {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
-  const nextBtn = document.getElementById('nextBtn'); // NEW next button
+  const nextBtn = document.getElementById('nextBtn'); // NEXT button
   const questionEl = document.getElementById('question');
   const timerEl = document.getElementById('timer');
   const role = window.INTERVIEW_ROLE || 'ml';
@@ -26,6 +26,9 @@
 
   // collect results
   const results = [];
+
+  // latest camera feedback
+  let latestCameraFeedback = null;
 
   function ensureBox(id, label, css = {}) {
     let el = document.getElementById(id);
@@ -132,13 +135,38 @@
   }
 
   let snapshotInterval = null;
+
+  // ------------------------------
+  // Webcam Setup
+  // ------------------------------
+  async function initCamera() {
+    let videoEl = document.getElementById('video_stream');
+    if (!videoEl) {
+      videoEl = document.createElement('video');
+      videoEl.id = 'video_stream';
+      videoEl.autoplay = true;
+      videoEl.playsInline = true;
+      videoEl.width = 320;
+      videoEl.height = 240;
+      videoEl.style.display = "none"; // hide if not needed
+      document.body.appendChild(videoEl);
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      videoEl.srcObject = stream;
+    } catch (err) {
+      console.error("Camera error:", err);
+    }
+  }
+
   function startSnapshots() {
     const imgEl = document.getElementById('video_stream');
     snapshotInterval = setInterval(() => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = imgEl.naturalWidth || imgEl.width;
-        canvas.height = imgEl.naturalHeight || imgEl.height;
+        canvas.width = imgEl.videoWidth || 640;
+        canvas.height = imgEl.videoHeight || 480;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(imgEl, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg');
@@ -150,10 +178,22 @@
           const ebox = ensureBox('emotion_box', 'Camera Feedback', { fontSize: '13px' });
           const g = j.gaze_ok ? '✅' : '⚠️';
           const p = j.posture_ok ? '✅' : '⚠️';
-          const em = j.emotion ? j.emotion : "Unknown";
+          const em = j.emotion || "Unknown";
           ebox.innerHTML = `<strong>Camera:</strong> Gaze ${g} | Posture ${p}<br/><em>Emotion: ${em}</em><br/><small>${j.notes || ''}</small>`;
-        }).catch(() => {});
-      } catch (e) {}
+
+          // store structured feedback
+          latestCameraFeedback = {
+            gaze: j.gaze_ok,
+            posture: j.posture_ok,
+            emotion: em,
+            notes: j.notes || ''
+          };
+        }).catch(err => {
+          console.warn("Frame analysis failed:", err);
+        });
+      } catch (e) {
+        console.warn("Snapshot error:", e);
+      }
     }, 3000);
   }
 
@@ -200,15 +240,17 @@
       console.warn("Audio analysis failed", e);
     }
 
-    const camText = document.getElementById('emotion_box')?.innerText || "Unknown";
+    const camFeedback = latestCameraFeedback || { gaze: false, posture: false, emotion: "Unknown", notes: "" };
 
     results.push({
       q: questions[currentIndex].question,
       ideal: questions[currentIndex].answers.join(" | "),
       transcript,
       score,
-      camera_notes: camText,
-      emotion: camText,
+      camera_notes: camFeedback.notes,
+      emotion: camFeedback.emotion,
+      gaze_ok: camFeedback.gaze,
+      posture_ok: camFeedback.posture,
       speech_rate: speechRate,
       clarity_notes: clarity,
       tone_notes: tone
@@ -232,7 +274,7 @@
     const { question, answers } = questions[currentIndex];
     questionEl.textContent = question;
 
-    nextBtn.disabled = false; // Enable Next while question is active
+    nextBtn.disabled = false;
 
     // Start audio recording
     try {
@@ -247,13 +289,13 @@
       console.error("Mic error:", err);
     }
 
-    // Speak the question, then start STT + snapshots
+    // Speak question, then start STT + snapshots
     speak(question, () => {
       startSTT();
       startSnapshots();
 
       startTimer(timePerQuestion, async () => {
-        await nextQuestionManually(); // Timer also uses same handler
+        await nextQuestionManually(); // timer also uses same handler
       });
     });
   }
@@ -282,6 +324,8 @@
         <strong>Speech Rate:</strong> ${r.speech_rate || 'N/A'}<br/>
         <strong>Clarity:</strong> ${r.clarity_notes || ''}<br/>
         <strong>Tone:</strong> ${r.tone_notes || ''}<br/>
+        <strong>Camera:</strong> Gaze ${r.gaze_ok ? '✅' : '⚠️'} | Posture ${r.posture_ok ? '✅' : '⚠️'}<br/>
+        <strong>Emotion:</strong> ${r.emotion}<br/>
         <details><summary>Reveal ideal answers</summary>${(r.ideal || '').replace(/\|/g, '<br/>')}</details>
       </div>`;
     }).join('');
@@ -320,6 +364,7 @@
     timerEl.textContent = "--";
 
     try {
+      await initCamera();
       questions = await loadQuestions(role);
     } catch {
       questions = [];
@@ -352,5 +397,7 @@
   // Event Listeners
   startBtn.addEventListener('click', startInterview);
   stopBtn.addEventListener('click', stopInterview);
-  nextBtn.addEventListener('click', nextQuestionManually); // NEW
+  nextBtn.addEventListener('click', nextQuestionManually);
 })();
+
+
