@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ qs.title }} · My questions{% endblock %}
+{% block styles %}
+  .grid2 { display: grid; grid-template-columns: .9fr 1.1fr; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opt { margin: 0; font-weight: 500; border: 1px solid var(--border); border-radius: 10px; padding: 10px;
+         cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+  .opt:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+  .opt input { margin-top: 4px; width: auto; }
+  .opt small { display: block; color: var(--muted); font-weight: 400; }
+  ol.qs { padding-left: 22px; margin: 0; }
+  ol.qs li { margin-bottom: 8px; }
+  ol.qs .ans { color: var(--muted); font-size: 13px; }
+  .hint { font-size: 13px; color: var(--muted); }
+{% endblock %}
+{% block content %}
+<p><a href="/questions">← My questions</a></p>
+<h1>📝 {{ qs.title }}</h1>
+<p class="muted">{{ qs.items|length }} questions</p>
+{% if saved %}<div class="alert info">Saved.</div>{% endif %}
+
+<div class="grid2">
+  <div class="card">
+    <h2>Start practising</h2>
+    <form method="post" action="/questions/{{ qs.id }}/start">
+      <label>Order</label>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="order" value="in_order" checked><span>In order</span></label>
+        <label class="opt"><input type="radio" name="order" value="shuffle"><span>Shuffle</span></label>
+      </div>
+      <label>Feedback</label>
+      <div class="opts">
+        <label class="opt"><input type="radio" name="feedback_mode" value="each" checked>
+          <span>After each answer<small>Spoken tip + score right away (1 Gemini request per answer)</small></span></label>
+        <label class="opt"><input type="radio" name="feedback_mode" value="end">
+          <span>Only at the end<small>Like a real interview; all graded together (1 request in total)</small></span></label>
+      </div>
+      <label for="count">How many questions</label>
+      <select id="count" name="count">
+        <option value="0">All {{ qs.items|length }}</option>
+        {% for n in [3, 5, 10, 15, 20] if n < qs.items|length %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+      </select>
+      <button class="btn" type="submit" style="width:100%;margin-top:18px">▶ Start</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Questions</h2>
+    <ol class="qs">
+      {% for i in qs.items %}<li>{{ i.question }}{% if i.answer %}<div class="ans">Model answer: {{ i.answer }}</div>{% endif %}</li>{% endfor %}
+    </ol>
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;font-weight:600">✏️ Edit set</summary>
+      <form method="post" action="/questions/{{ qs.id }}" enctype="multipart/form-data">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" maxlength="120" value="{{ qs.title }}">
+        <label for="questions">Questions (one per line, optional <code>:: model answer</code>)</label>
+        <textarea id="questions" name="questions" rows="10">{{ text }}</textarea>
+        <label for="upload">…or replace from a .txt / .csv file</label>
+        <input id="upload" name="upload" type="file" accept=".txt,.csv">
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <button class="btn" type="submit">Save changes</button>
+        </div>
+      </form>
+      <form method="post" action="/questions/{{ qs.id }}/delete" style="margin-top:10px"
+            onsubmit="return confirm('Delete this question set?')">
+        <button class="btn link small" type="submit">Delete set</button>
+      </form>
+    </details>
+  </div>
+</div>
+{% endblock %}

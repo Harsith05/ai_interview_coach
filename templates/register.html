@@ -1,0 +1,36 @@
+{% extends "auth_base.html" %}
+{% block title %}Sign up · AI Interview Coach{% endblock %}
+{% block form %}
+  <h1>Create your account</h1>
+  <p class="sub">Free to use with your own Gemini API key.</p>
+  <form method="post" action="/register" novalidate>
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" autocomplete="name" required value="{{ form.name or '' }}" placeholder="Your name">
+    {% if errors.name %}<div class="field-error">{{ errors.name }}</div>{% endif %}
+
+    <label for="email">Email</label>
+    <input id="email" name="email" type="email" autocomplete="email" required value="{{ form.email or '' }}" placeholder="you@example.com">
+    {% if errors.email %}<div class="field-error">{{ errors.email }}</div>{% endif %}
+
+    <label for="password">Password</label>
+    <div class="pw-wrap"><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required><button type="button">Show</button></div>
+    {% if errors.password %}<div class="field-error">{{ errors.password }}</div>
+    {% else %}<div class="hint" style="margin-top:5px">At least 8 characters.</div>{% endif %}
+
+    <label for="confirm_password">Confirm password</label>
+    <div class="pw-wrap"><input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" required><button type="button">Show</button></div>
+    {% if errors.confirm_password %}<div class="field-error">{{ errors.confirm_password }}</div>{% endif %}
+    <div id="match-hint" class="field-error" style="display:none">Passwords do not match.</div>
+
+    <button class="btn" type="submit" style="width:100%;margin-top:24px">Create account</button>
+  </form>
+  <p class="alt">Already have an account? <a href="/login">Log in</a></p>
+{% endblock %}
+{% block page_scripts %}
+<script>
+  const pw = document.getElementById('password'), cpw = document.getElementById('confirm_password');
+  const hint = document.getElementById('match-hint');
+  const check = () => { hint.style.display = cpw.value && pw.value !== cpw.value ? 'block' : 'none'; };
+  pw.addEventListener('input', check); cpw.addEventListener('input', check);
+</script>
+{% endblock %}

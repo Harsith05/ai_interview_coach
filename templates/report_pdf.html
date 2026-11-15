@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: a4 portrait; margin: 1.6cm; }
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #1f2933; line-height: 1.4; }
+  h1 { font-size: 18pt; margin: 0 0 2pt; color: #4f46e5; }
+  h2 { font-size: 13pt; margin: 14pt 0 6pt; border-bottom: 1px solid #ccc; padding-bottom: 2pt; }
+  h3 { font-size: 11.5pt; color: #4f46e5; margin: 10pt 0 4pt; }
+  h4 { font-size: 10.5pt; margin: 8pt 0 3pt; }
+  .muted, .rubric { color: #6b7280; }
+  .rubric { font-size: 9pt; }
+  table.stats { width: 100%; border-collapse: collapse; margin: 6pt 0; }
+  table.stats td { border: 1px solid #e5e7eb; padding: 5pt; text-align: center; }
+  table.stats .v { font-size: 13pt; font-weight: bold; }
+  .answer-card { border: 1px solid #e5e7eb; padding: 6pt; margin-bottom: 6pt; }
+  .answer-card p { margin: 3pt 0; }
+  .badge { color: #374151; font-size: 8.5pt; }
+  .grade { font-weight: bold; color: #4f46e5; }
+</style>
+</head>
+<body>
+  <h1>Interview report</h1>
+  <div class="muted">{{ user.name }} · {{ ROLE_LABELS.get(iv.role, iv.role) }} · {{ MODES.get(iv.mode, iv.mode) }} ·
+    {{ (iv.completed_at or iv.created_at)|dt }}</div>
+
+  <table class="stats"><tr>
+    <td><div class="v">{{ s.overall_score if s.overall_score is not none else '-' }}/10</div>Overall score</td>
+    <td><div class="v">{{ s.questions_answered }}</div>Answers</td>
+    <td><div class="v">{{ s.avg_wpm|int if s.avg_wpm else '-' }}</div>Words/min</td>
+    <td><div class="v">{{ s.total_fillers or 0 }}</div>Filler words</td>
+    <td><div class="v">{{ s.avg_gaze_pct|int if s.avg_gaze_pct is number else '-' }}%</div>Eye contact</td>
+  </tr></table>
+
+  <h2>Answers</h2>
+  {% include "_answers.html" %}
+
+  <h2>Coach's report</h2>
+  {{ (iv.feedback_html or '')|safe }}
+</body>
+</html>

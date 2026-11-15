@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Speaking practice · AI Interview Coach{% endblock %}
+{% block styles %}
+  .setup { max-width: 760px; margin: 8px auto; }
+  .scenarios { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+  .opt { margin: 0; font-weight: 500; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
+         cursor: pointer; display: flex; gap: 8px; align-items: flex-start; background: #fff; }
+  .opt:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+  .opt input { margin-top: 4px; }
+  .opt small { display: block; color: var(--muted); font-weight: 400; }
+  .levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (max-width: 600px) { .levels { grid-template-columns: 1fr; } }
+{% endblock %}
+{% block content %}
+<div class="card setup">
+  <h1>🗣️ English speaking practice</h1>
+  <p class="muted">Have a natural spoken conversation with the AI. It talks, listens until you pause, and replies.
+    You'll see gentle corrections as you go and get a speaking report at the end (up to {{ max_turns }} turns; you can stop any time).</p>
+
+  <form method="post" action="/practice" id="practiceForm">
+    <label>Scenario</label>
+    <div class="scenarios">
+      {% for key, s in scenarios.items() %}
+      <label class="opt"><input type="radio" name="scenario" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+        <span>{{ s.title }}<small>{{ s.description }}</small></span></label>
+      {% endfor %}
+    </div>
+
+    <label>Your level</label>
+    <div class="levels">
+      {% for key, l in levels.items() %}
+      <label class="opt"><input type="radio" name="level" value="{{ key }}" {% if key == 'intermediate' %}checked{% endif %}>
+        <span>{{ l.title }}</span></label>
+      {% endfor %}
+    </div>
+
+    <button class="btn" type="submit" style="width:100%;margin-top:22px" id="go">Start conversation</button>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById('practiceForm').addEventListener('submit', () => {
+    const b = document.getElementById('go'); b.disabled = true; b.textContent = 'Setting up…';
+  });
+</script>
+{% endblock %}

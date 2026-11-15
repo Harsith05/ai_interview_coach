@@ -1,0 +1,34 @@
+{# Per-answer breakdown, shared by the report page and the PDF. Expects `answers`. #}
+{% for r in answers %}
+{% set g = r.grade or {} %}
+<div class="answer-card">
+  <div class="answer-head">
+    <strong>Q{{ r.number }}{% if r.is_follow_up %} · follow-up{% endif %}</strong>
+    {% if r.difficulty %}<span class="badge">{{ r.difficulty }}</span>{% endif %}
+    {% if r.topic %}<span class="badge">{{ r.topic }}</span>{% endif %}
+    {% if g.overall is not none and g.overall is defined %}<span class="grade">{{ g.overall|round(1) }}/10</span>{% endif %}
+  </div>
+  <p><strong>{{ r.q }}</strong></p>
+  <p><em>Your answer:</em> {{ r.transcript or '(no speech detected)' }}</p>
+  {% if r.audio_status and 'Transcribed' not in r.audio_status %}<p class="muted">🎤 {{ r.audio_status }}</p>{% endif %}
+  {% if g.accuracy %}
+  <p class="rubric">Accuracy {{ g.accuracy }}/5 · Depth {{ g.depth }}/5 · Structure {{ g.structure }}/5 · Communication {{ g.communication }}/5</p>
+  {% endif %}
+  {% if g.star %}
+  <p class="rubric">STAR:
+    {% for part in ['situation', 'task', 'action', 'result'] %}{{ part|capitalize }} {{ '✓' if g.star[part] else '✗' }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+  {% if g.strength %}<p>👍 {{ g.strength }}</p>{% endif %}
+  {% if g.improvement %}<p>💡 {{ g.improvement }}</p>{% endif %}
+  {% if g.missed_points %}<p><em>Missed:</em> {{ g.missed_points|join('; ') }}</p>{% endif %}
+  <p class="rubric">
+    Pace {{ r.wpm|int if r.wpm else '–' }} WPM ·
+    Fillers {{ r.filler_count or 0 }}{% if r.fillers %} ({% for w, n in r.fillers.items() %}{{ w }}×{{ n }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %} ·
+    Long pauses {{ r.long_pauses or 0 }} ·
+    Eye contact {{ r.gaze_pct or 0 }}% · Posture {{ r.posture_pct or 0 }}% · Emotion {{ r.emotion or '–' }} ·
+    Tone: {{ r.tone_notes or '–' }}
+  </p>
+  {% if r.ideal %}<p class="muted"><em>Model answer:</em> {{ r.ideal }}</p>{% endif %}
+</div>
+{% endfor %}

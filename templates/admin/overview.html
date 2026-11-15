@@ -1,0 +1,81 @@
+{% extends "sqladmin/layout.html" %}
+{# The layout wraps this block in a Tabler "row row-deck row-cards": top-level elements must be columns. #}
+{% block content %}
+{% set cards = [
+  ("Users", stats.users, "+" ~ stats.new_users_7d ~ " this week"),
+  ("Active today", stats.active_24h, stats.active_7d ~ " active in the last 7 days"),
+  ("Interviews completed", stats.interviews, ("average " ~ ("%.1f"|format(stats.avg_score)) ~ " / 10") if stats.avg_score else "no scores yet"),
+  ("Speaking sessions", stats.speaking, stats.drills ~ " question-set runs · " ~ stats.talks ~ " talks"),
+  ("Users with a Gemini key", stats.with_key, "of " ~ stats.users ~ " users"),
+  ("Failed logins (24 h)", stats.failed_24h, "wrong password or unknown email"),
+] %}
+{% for title, value, sub in cards %}
+<div class="col-sm-6 col-lg-4 col-xxl-2">
+  <div class="card"><div class="card-body">
+    <div class="subheader">{{ title }}</div>
+    <div class="h1 mb-1 mt-1">{{ value }}</div>
+    <div class="text-muted small">{{ sub }}</div>
+  </div></div>
+</div>
+{% endfor %}
+
+<div class="col-xl-7">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">Latest completed interviews</h3>
+      <div class="card-actions"><a href="/admin/interview/list">All interviews →</a></div></div>
+    <div class="table-responsive">
+      <table class="table card-table table-vcenter">
+        <thead><tr><th>User</th><th>Role</th><th>Score</th><th>Completed</th><th></th></tr></thead>
+        <tbody>
+        {% for i in recent_interviews %}
+          <tr>
+            <td><strong>{{ i.who }}</strong><div class="text-muted small">{{ i.email }}</div></td>
+            <td>{{ i.role }}</td>
+            <td>{% if i.score is not none %}<span class="badge {{ 'bg-red-lt' if i.score < 4 else ('bg-orange-lt' if i.score < 7 else 'bg-green-lt') }}">{{ '%.1f'|format(i.score) }}/10</span>{% else %}–{% endif %}</td>
+            <td class="text-muted text-nowrap">{{ i.when }}</td>
+            <td><a href="/staff/interview/{{ i.id }}" target="_blank">Report</a></td>
+          </tr>
+        {% else %}<tr><td colspan="5" class="text-muted">No completed interviews yet.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="col-xl-5">
+  <div class="w-100">
+    <div class="card mb-3">
+      <div class="card-header"><h3 class="card-title">Recent logins</h3>
+        <div class="card-actions"><a href="/admin/login-event/list">History →</a></div></div>
+      <div class="table-responsive">
+        <table class="table card-table table-vcenter">
+          <thead><tr><th>Who</th><th>When</th><th></th></tr></thead>
+          <tbody>
+          {% for e in recent_logins %}
+            <tr>
+              <td>{{ e.email }}<div class="text-muted small">{{ e.kind }}{% if e.ip %} · {{ e.ip }}{% endif %}</div></td>
+              <td class="text-muted small text-nowrap">{{ e.when }}</td>
+              <td>{% if e.ok %}<span class="badge bg-green-lt">ok</span>{% else %}<span class="badge bg-red-lt">failed</span>{% endif %}</td>
+            </tr>
+          {% else %}<tr><td colspan="3" class="text-muted">No logins recorded yet.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Most active users</h3></div>
+      <div class="table-responsive">
+        <table class="table card-table table-vcenter">
+          <thead><tr><th>User</th><th>Interviews</th><th>Avg score</th></tr></thead>
+          <tbody>
+          {% for l in leaders %}
+            <tr><td>{{ l.name }}<div class="text-muted small">{{ l.email }}</div></td><td>{{ l.count }}</td>
+              <td>{{ '%.1f'|format(l.avg) if l.avg is not none else '–' }}</td></tr>
+          {% else %}<tr><td colspan="3" class="text-muted">–</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

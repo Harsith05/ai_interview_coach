@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Talk with {{ settings.name }} · AI Interview Coach{% endblock %}
+{% block styles %}
+  .talk { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .talk { grid-template-columns: 1fr; } }
+  .stage { text-align: center; padding: 28px 16px 20px; }
+  .orb { width: 160px; height: 160px; border-radius: 50%; margin: 0 auto; position: relative;
+         background: radial-gradient(circle at 35% 30%, #c4b5fd, #6d28d9 55%, #3730a3);
+         box-shadow: 0 0 0 0 rgba(99,72,230,.35); transition: transform .15s, filter .3s; cursor: pointer; }
+  .orb::after { content: ""; position: absolute; inset: -14px; border-radius: 50%; border: 3px solid transparent; }
+  .orb.idle { filter: grayscale(.85) brightness(1.05); }
+  .orb.standby { filter: grayscale(.6) brightness(.95); animation: breathe 4s ease-in-out infinite; }
+  .orb.listening::after { border-color: #e53935; animation: ring 1.4s ease-out infinite; }
+  .orb.thinking { animation: spin-glow 1.2s linear infinite; }
+  .orb.speaking { animation: talk .5s ease-in-out infinite alternate; }
+  @keyframes breathe { 50% { transform: scale(.94); } }
+  @keyframes ring { 0% { transform: scale(.92); opacity: 1; } 100% { transform: scale(1.18); opacity: 0; } }
+  @keyframes spin-glow { 0% { box-shadow: 0 0 10px 2px rgba(99,72,230,.4); } 50% { box-shadow: 0 0 28px 8px rgba(99,72,230,.55); } 100% { box-shadow: 0 0 10px 2px rgba(99,72,230,.4); } }
+  @keyframes talk { from { transform: scale(1); } to { transform: scale(1.06); } }
+  .name { font-size: 22px; font-weight: 700; margin-top: 16px; }
+  .state { font-weight: 600; min-height: 24px; margin-top: 4px; color: var(--muted); }
+  .state.listening { color: var(--danger); }
+  .caption { font-size: 18px; min-height: 54px; margin: 14px auto 0; max-width: 620px; line-height: 1.45; }
+  .meter { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; max-width: 260px; margin: 14px auto 0; }
+  .meter div { height: 100%; width: 0; background: var(--primary); transition: width .08s; }
+  .chat { max-height: 42vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.45; }
+  .msg.ai { background: #eef2f7; align-self: flex-start; }
+  .msg.user { background: var(--primary-soft); align-self: flex-end; }
+  .msg.pending { opacity: .6; font-style: italic; }
+  .fix { font-size: 12.5px; margin-top: 6px; padding-top: 5px; border-top: 1px dashed #c7d2fe; }
+  .fix .bad { text-decoration: line-through; color: var(--danger); }
+  .fix .good { color: var(--primary); font-weight: 600; }
+  .learned { font-size: 12px; color: var(--muted); align-self: center; }
+  .side label { font-size: 13px; margin: 12px 0 4px; }
+  .side select { font-size: 13px; padding: 6px; }
+  .toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 500; margin-top: 10px; }
+  .toggle input { width: auto; }
+  .controls { display: flex; flex-direction: column; gap: 8px; }
+  kbd { background: #f1f3f5; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+{% endblock %}
+{% block content %}
+<div class="talk">
+  <div>
+    <div class="card stage">
+      <div class="orb idle" id="orb" title="Click or press Space to talk"></div>
+      <div class="name">{{ settings.name }}</div>
+      <div class="state" id="state">Click the orb (or press <kbd>Space</kbd>) to start</div>
+      <div class="meter"><div id="meter"></div></div>
+      <div class="caption" id="caption"></div>
+    </div>
+    <div class="card" style="margin-top:18px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Conversation</strong>
+        <span class="muted" style="font-size:13px">🧠 remembers {{ memory_count }} things about you · {{ past_sessions }} past chats</span>
+      </div>
+      <div class="chat" id="chat"></div>
+    </div>
+  </div>
+
+  <div class="card side">
+    <div class="controls">
+      <button class="btn" id="talkBtn">🎙️ Start talking</button>
+      <button class="btn secondary" id="doneBtn" disabled>✔ I'm done speaking</button>
+      <button class="btn secondary" id="repeatBtn" disabled>🔁 Repeat</button>
+      <button class="btn secondary" id="endBtn" disabled>👋 End &amp; save to memory</button>
+    </div>
+
+    <label class="toggle"><input type="checkbox" id="handsFree" checked> Hands-free (reply when I pause)</label>
+    <label class="toggle"><input type="checkbox" id="standbyOn" checked> Standby + wake word "{{ settings.name }}"</label>
+    <label class="toggle"><input type="checkbox" id="showFixes" {% if settings.corrections %}checked{% endif %}> Show corrections</label>
+
+    <label for="micSelect">Microphone</label>
+    <select id="micSelect"></select>
+    <label for="voiceSelect">Voice</label>
+    <select id="voiceSelect"></select>
+    <label for="rate">Speaking speed</label>
+    <input type="range" id="rate" min="0.7" max="1.2" step="0.05" value="{{ level.speech_rate }}">
+    <label for="pause">Wait before replying: <span id="pauseLabel">6 s</span></label>
+    <input type="range" id="pause" min="2" max="10" step="0.5" value="6"
+           title="How long you can pause while speaking before your turn is sent">
+    <div class="muted" style="font-size:12px">Finished early? Press <kbd>Space</kbd> or "I'm done speaking".</div>
+
+    <p class="muted" style="font-size:12.5px;margin:14px 0 0">
+      When you go quiet for a while, {{ settings.name }} goes on standby. Say <strong>"Hey {{ settings.name }}"</strong>
+      or press <kbd>Space</kbd> to wake it.<br><br>
+      <a href="/memory">🧠 What {{ settings.name }} remembers · settings</a>
+    </p>
+    <form method="post" action="/talk/new" style="margin-top:12px">
+      <button class="btn link small" type="submit">Start a fresh conversation</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.TALK = { id: "{{ ts.id }}", name: {{ settings.name|tojson }} };
+</script>
+<script src="{{ static_url('js/robot.js') }}" data-robot="nova" data-name="{{ settings.name }}"></script>
+<script src="{{ static_url('js/voice-core.js') }}"></script>
+<script src="{{ static_url('js/talk.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Memory · AI Interview Coach{% endblock %}
+{% block styles %}
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .item { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; padding: 8px 0;
+          border-bottom: 1px solid var(--border); font-size: 14px; }
+  .item form { margin: 0; }
+  .x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
+  .x:hover { color: var(--danger); }
+  .settings { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+  @media (max-width: 760px) { .settings { grid-template-columns: 1fr; } }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 500; margin-top: 12px; }
+  .check input { width: auto; }
+{% endblock %}
+{% block content %}
+<h1>🧠 What {{ settings.name }} remembers</h1>
+<p class="muted">{{ settings.name }} learns about you while you talk, so conversations feel continuous. You can delete anything here.</p>
+
+{% if request.query_params.get('saved') %}<div class="alert info">Settings saved.</div>{% endif %}
+
+<div class="card" style="margin-bottom:18px">
+  <h2>Companion settings</h2>
+  <form method="post" action="/memory/settings">
+    <div class="settings">
+      <div><label for="name">Name (also the wake word)</label>
+        <input id="name" name="name" type="text" maxlength="20" value="{{ settings.name }}"></div>
+      <div><label for="level">Your level</label>
+        <select id="level" name="level">
+          {% for key, l in levels.items() %}<option value="{{ key }}" {% if key == settings.level %}selected{% endif %}>{{ l.title }}</option>{% endfor %}
+        </select></div>
+      <button class="btn" type="submit">Save</button>
+    </div>
+    <label class="check"><input type="checkbox" name="corrections" value="true" {% if settings.corrections %}checked{% endif %}>
+      Show grammar corrections while we talk</label>
+    <p class="muted" style="font-size:13px;margin-bottom:0">Tip: a distinctive 2–3 syllable name works best as a wake word (speech recognition may mishear very short or common names).</p>
+  </form>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>About you ({{ m.facts|length }})</h2>
+    {% for i in m.facts %}
+      <div class="item"><span>{{ i.value.fact }}</span>
+        <form method="post" action="/memory/delete"><input type="hidden" name="kind" value="memories"><input type="hidden" name="key" value="{{ i.key }}">
+          <button class="x" title="Forget this" type="submit">✕</button></form></div>
+    {% else %}<p class="muted">Nothing yet. Talk to {{ settings.name }} and it will learn about you.</p>{% endfor %}
+  </div>
+  <div class="card">
+    <h2>Mistakes to work on</h2>
+    {% for i in m.mistakes %}
+      <div class="item"><span><strong>{{ i.value.type }}</strong> <span class="badge orange">{{ i.value.count }}×</span>
+        {% set ex = (i.value.examples or [{}])[0] %}{% if ex.original %}<br><span class="muted">"{{ ex.original }}" → "{{ ex.corrected }}"</span>{% endif %}</span>
+        <form method="post" action="/memory/delete"><input type="hidden" name="kind" value="mistakes"><input type="hidden" name="key" value="{{ i.key }}">
+          <button class="x" title="Remove" type="submit">✕</button></form></div>
+    {% else %}<p class="muted">No recurring mistakes recorded.</p>{% endfor %}
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2>Past conversations</h2>
+  {% for i in m.sessions %}
+    <div class="item"><span><span class="muted">{{ i.value.date[:10] }}</span> · {{ i.value.summary }}
+      {% for t in i.value.topics or [] %}<span class="badge">{{ t }}</span> {% endfor %}</span>
+      <form method="post" action="/memory/delete"><input type="hidden" name="kind" value="sessions"><input type="hidden" name="key" value="{{ i.key }}">
+        <button class="x" title="Forget this conversation" type="submit">✕</button></form></div>
+  {% else %}<p class="muted">No past conversations yet.</p>{% endfor %}
+</div>
+
+<form method="post" action="/memory/forget" onsubmit="return confirm('Forget everything {{ settings.name }} knows about you? This cannot be undone.')">
+  <button class="btn secondary" type="submit">Forget everything</button>
+</form>
+{% endblock %}

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% block title %}AI Interview Coach{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%234f46e5'/%3E%3Cpath d='M9 20c2.5 3 11.5 3 14 0M11 12h.01M21 12h.01' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #f5f6fb; --card: #ffffff; --text: #0f172a; --text-2: #334155; --muted: #64748b; --border: #e4e7ef;
+      --primary: #4f46e5; --primary-hover: #4338ca; --primary-soft: #eef2ff; --accent: #7c3aed;
+      --grad: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+      --success: #15803d; --success-soft: #dcfce7;
+      --danger: #be123c; --danger-soft: #ffe4e6; --warn: #b45309; --warn-soft: #fef3c7;
+      --radius: 16px; --radius-sm: 10px;
+      --shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 24px rgba(15,23,42,.06);
+      --shadow-lg: 0 10px 40px rgba(79,70,229,.14);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+           background: var(--bg); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased;
+           background-image: radial-gradient(1200px 500px at 85% -120px, rgba(124,58,237,.10), transparent 60%),
+                             radial-gradient(900px 400px at -10% -80px, rgba(79,70,229,.08), transparent 60%);
+           background-repeat: no-repeat; min-height: 100vh; display: flex; flex-direction: column; }
+    a { color: var(--primary); text-underline-offset: 3px; }
+    ::selection { background: #c7d2fe; }
+
+    /* ---------- navigation ---------- */
+    nav.top { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.78);
+              backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+              border-bottom: 1px solid rgba(228,231,239,.8); }
+    nav.top .inner { max-width: 1200px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 6px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--text); text-decoration: none;
+             letter-spacing: -.01em; margin-right: auto; font-size: 16px; }
+    .logo { width: 34px; height: 34px; border-radius: 10px; background: var(--grad); display: grid; place-items: center;
+            box-shadow: 0 4px 12px rgba(79,70,229,.35); flex: none; }
+    .nav-links { display: flex; gap: 2px; align-items: center; }
+    .nav-links a { text-decoration: none; color: var(--text-2); font-weight: 500; font-size: 14.5px; padding: 8px 12px;
+                   border-radius: 10px; display: flex; align-items: center; gap: 7px; transition: background .15s, color .15s; }
+    .nav-links a:hover { background: #f1f2f9; color: var(--text); }
+    .nav-links a.active { background: var(--primary-soft); color: var(--primary); }
+    .nav-links a svg { width: 17px; height: 17px; opacity: .85; }
+    .menu { position: relative; margin-left: 8px; }
+    .menu summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 4px;
+                    border-radius: 999px; border: 1px solid var(--border); background: #fff; }
+    .menu summary::-webkit-details-marker { display: none; }
+    .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--grad); color: #fff; font-weight: 700;
+              font-size: 13px; display: grid; place-items: center; }
+    .menu .caret { width: 14px; height: 14px; color: var(--muted); }
+    .menu-panel { position: absolute; right: 0; top: calc(100% + 8px); min-width: 230px; background: #fff; border: 1px solid var(--border);
+                  border-radius: 14px; box-shadow: 0 12px 40px rgba(15,23,42,.14); padding: 6px; }
+    .menu-panel .who { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+    .menu-panel .who strong { display: block; font-size: 14px; }
+    .menu-panel .who span { font-size: 12.5px; color: var(--muted); word-break: break-all; }
+    .menu-panel a, .menu-panel button { display: flex; width: 100%; align-items: center; gap: 9px; padding: 9px 12px; border-radius: 9px;
+                    color: var(--text-2); text-decoration: none; font: inherit; font-size: 14px; background: none; border: 0; cursor: pointer; text-align: left; }
+    .menu-panel a:hover, .menu-panel button:hover { background: #f4f5fb; color: var(--text); }
+    .menu-panel form { margin: 0; }
+    .nav-toggle { display: none; }
+    @media (max-width: 980px) {
+      .nav-links { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border-bottom: 1px solid var(--border);
+                   flex-direction: column; align-items: stretch; padding: 8px 16px 14px; display: none; box-shadow: 0 12px 24px rgba(15,23,42,.08); }
+      .nav-links.open { display: flex; }
+      .nav-toggle { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+                    background: #fff; cursor: pointer; }
+    }
+
+    /* ---------- layout & components ---------- */
+    main { max-width: 1200px; width: 100%; margin: 0 auto; padding: 32px 20px 64px; flex: 1; }
+    .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); padding: 24px; }
+    h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.02em; line-height: 1.2; }
+    h2 { font-size: 19px; margin: 0 0 12px; letter-spacing: -.01em; }
+    h3 { letter-spacing: -.01em; }
+    .muted { color: var(--muted); }
+    .eyebrow { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; letter-spacing: .06em;
+               text-transform: uppercase; color: var(--primary); background: var(--primary-soft); padding: 5px 10px; border-radius: 999px; }
+    .page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+    .page-head p { margin: 4px 0 0; color: var(--muted); }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: var(--grad); color: #fff;
+           border: 0; border-radius: var(--radius-sm); padding: 11px 18px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+           text-decoration: none; box-shadow: 0 4px 14px rgba(79,70,229,.28); transition: transform .12s, box-shadow .12s, filter .12s; }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgba(79,70,229,.32); filter: brightness(1.04); }
+    .btn:active { transform: none; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; filter: grayscale(.2); }
+    .btn.secondary { background: #fff; color: var(--text); border: 1px solid var(--border); box-shadow: 0 1px 2px rgba(15,23,42,.05); }
+    .btn.secondary:hover { background: #f8f9fd; border-color: #d6daea; }
+    .btn.danger { background: #fff; color: var(--danger); border: 1px solid #fecdd3; box-shadow: none; }
+    .btn.danger:hover { background: var(--danger-soft); }
+    .btn.small { padding: 7px 12px; font-size: 13.5px; border-radius: 9px; }
+    .btn.link { background: none; color: var(--muted); padding: 0; font-weight: 500; box-shadow: none; }
+    .btn.link:hover { color: var(--danger); transform: none; }
+
+    label { display: block; font-weight: 600; margin: 16px 0 6px; font-size: 14px; color: var(--text-2); }
+    input[type=text], input[type=email], input[type=password], input[type=number], select, textarea {
+      width: 100%; padding: 11px 13px; font-size: 15px; border: 1px solid #d9ddea; border-radius: var(--radius-sm);
+      background: #fff; color: var(--text); font-family: inherit; transition: border-color .15s, box-shadow .15s; }
+    input::placeholder, textarea::placeholder { color: #9aa3b5; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(79,70,229,.14); }
+    input[type=range] { accent-color: var(--primary); width: 100%; }
+    input[type=checkbox], input[type=radio] { accent-color: var(--primary); }
+    .field-error { color: var(--danger); font-size: 13px; margin-top: 5px; }
+    .hint { font-size: 13px; color: var(--muted); }
+
+    .alert { padding: 12px 14px; border-radius: 12px; margin-bottom: 16px; font-size: 14px; border: 1px solid transparent; }
+    .alert.error { background: var(--danger-soft); color: #9f1239; border-color: #fecdd3; }
+    .alert.info { background: var(--primary-soft); color: #3730a3; border-color: #c7d2fe; }
+    .alert.success { background: var(--success-soft); color: #166534; border-color: #bbf7d0; }
+    .alert.warn { background: var(--warn-soft); color: #92400e; border-color: #fde68a; }
+
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+             background: #eef0f6; color: #334155; }
+    .badge.green { background: var(--success-soft); color: var(--success); }
+    .badge.orange { background: var(--warn-soft); color: var(--warn); }
+    .badge.red { background: var(--danger-soft); color: var(--danger); }
+    .badge.indigo { background: var(--primary-soft); color: var(--primary); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+    tr:last-child td { border-bottom: 0; }
+    .table-wrap { overflow-x: auto; }
+    kbd { background: #f1f3f9; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 0 6px;
+          font-size: 12px; font-family: inherit; }
+
+    .banner { background: linear-gradient(90deg, #4f46e5, #7c3aed); color: #fff; font-size: 14px; }
+    .banner .inner { max-width: 1200px; margin: 0 auto; padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .banner a { color: #fff; font-weight: 700; }
+
+    footer.site { border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+    footer.site .inner { max-width: 1200px; margin: 0 auto; padding: 18px 20px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    footer.site a { color: var(--muted); text-decoration: none; }
+    footer.site a:hover { color: var(--text); }
+    {% block styles %}{% endblock %}
+  </style>
+</head>
+<body>
+  {% set path = request.url.path if request else '' %}
+  <nav class="top">
+    <div class="inner">
+      <a class="brand" href="/">
+        <span class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="6" width="16" height="12" rx="4" stroke="#fff" stroke-width="2"/><circle cx="9.5" cy="12" r="1.6" fill="#fff"/><circle cx="14.5" cy="12" r="1.6" fill="#fff"/><path d="M12 3v3" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>
+        AI Interview Coach
+      </a>
+      {% if user %}
+        <div class="nav-links" id="navLinks">
+          <a href="/interviews/new" class="{{ 'active' if path.startswith('/interview') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Interview</a>
+          <a href="/talk" class="{{ 'active' if path.startswith('/talk') or path.startswith('/memory') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3"/></svg>Talk</a>
+          <a href="/practice" class="{{ 'active' if path.startswith('/practice') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Speaking</a>
+          <a href="/questions" class="{{ 'active' if path.startswith('/questions') or path.startswith('/drill') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 9a3 3 0 1 1 4.2 2.75c-.75.33-1.2 1.08-1.2 1.9V14M12 18h.01"/><circle cx="12" cy="12" r="9.5"/></svg>My questions</a>
+          <a href="/dashboard" class="{{ 'active' if path.startswith('/dashboard') else '' }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Dashboard</a>
+        </div>
+        <button class="nav-toggle" type="button" aria-label="Menu" onclick="document.getElementById('navLinks').classList.toggle('open')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <details class="menu">
+          <summary aria-label="Account menu"><span class="avatar">{{ (user.name or '?')[:1]|upper }}</span>
+            <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <div class="menu-panel">
+            <div class="who"><strong>{{ user.name }}</strong><span>{{ user.email }}</span></div>
+            <a href="/settings">⚙️ Account</a>
+            <a href="/settings/api-keys">🔑 Gemini API keys</a>
+            <a href="/memory">🧠 Talk memory</a>
+            <form method="post" action="/logout"><button type="submit">↩ Log out</button></form>
+          </div>
+        </details>
+      {% else %}
+        <div style="display:flex;gap:8px;align-items:center">
+          <a class="btn secondary small" href="/login">Log in</a>
+          <a class="btn small" href="/register">Get started</a>
+        </div>
+      {% endif %}
+    </div>
+  </nav>
+  {% if user and not path.startswith('/settings/api-keys') and not has_api_key(user) %}
+  <div class="banner"><div class="inner">
+    🔑 <span>Add your free Gemini API key to start practising. It takes about a minute.</span>
+    <a href="/settings/api-keys">Add API key →</a>
+  </div></div>
+  {% endif %}
+  <main>
+    {% if flash %}<div class="alert {{ 'error' if flash.kind == 'error' else 'success' }}">{{ flash.text }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site"><div class="inner">
+    <span>© AI Interview Coach · practise interviews and spoken English with AI</span>
+    <span>{% if user %}<a href="/settings/api-keys">API keys</a> · <a href="/settings">Account</a>{% else %}<a href="/login">Log in</a> · <a href="/register">Sign up</a>{% endif %}</span>
+  </div></footer>
+  <script>
+    // Close the account menu when clicking elsewhere.
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.removeAttribute('open'); });
+    });
+  </script>
+  <script src="{{ static_url('js/net-status.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

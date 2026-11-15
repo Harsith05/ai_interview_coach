@@ -1,29 +1,160 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Interview Coach</title>
-    <style>
-        body { font-family: Arial, sans-serif; background: #f4f6f9; text-align: center; margin-top: 100px; }
-        h1 { color: #333; }
-        select, button { padding: 10px 20px; margin-top: 20px; font-size: 18px; }
-        button { background: #4CAF50; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        button:hover { background: #45a049; }
-    </style>
-</head>
-<body>
-    <h1>Welcome to AI Interview Coach</h1>
-    <form method="POST">
-        <label for="role">Select your role:</label><br>
-        <select name="role" id="role" required>
-            <option value="ml">Machine Learning</option>
-            <option value="frontend">Frontend Developer</option>
-            <option value="backend">Backend Developer</option>
-            <option value="data_analyst">Data Analyst</option>
+{% extends "base.html" %}
+{% block title %}New interview · AI Interview Coach{% endblock %}
+{% block styles %}
+  .setup { max-width: 640px; margin: 8px auto; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+  .mode-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mode-opts label { margin: 0; font-weight: 500; border: 1px solid var(--border); border-radius: 8px;
+                     padding: 12px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
+  .mode-opts input { margin-top: 4px; }
+  .mode-opts small { display: block; color: var(--muted); font-weight: 400; }
+  /* Personalize panel: always visible so people notice it. */
+  .personalize { margin-top: 22px; border: 1px solid #c7d2fe; border-radius: 14px; padding: 18px;
+                 background: linear-gradient(180deg, #f5f7ff 0%, #ffffff 100%); }
+  .p-head { display: flex; gap: 12px; align-items: flex-start; }
+  .p-icon { width: 38px; height: 38px; border-radius: 11px; background: var(--grad); color: #fff; flex: none;
+            display: grid; place-items: center; box-shadow: 0 4px 12px rgba(79,70,229,.3); }
+  .p-icon svg { width: 20px; height: 20px; }
+  .p-head h3 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .p-head p { margin: 3px 0 0; font-size: 13.5px; color: var(--text-2); }
+  .dropzone { margin: 14px 0 0; display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer;
+              border: 1.5px dashed #a5b4fc; border-radius: 12px; background: #fff; font-weight: 500;
+              transition: border-color .15s, background .15s, box-shadow .15s; }
+  .dropzone:hover, .dropzone.drag { border-color: var(--primary); background: var(--primary-soft); }
+  .dropzone:focus-within { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(79,70,229,.14); }
+  .dropzone .dz-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--primary-soft); color: var(--primary);
+                       display: grid; place-items: center; flex: none; }
+  .dropzone .dz-icon svg { width: 18px; height: 18px; }
+  .dropzone strong { display: block; font-size: 14.5px; color: var(--text); }
+  .dropzone small { display: block; font-size: 12.5px; color: var(--muted); font-weight: 400; }
+  .dropzone.has-file { border-style: solid; border-color: #86efac; background: #f0fdf4; }
+  .dropzone.has-file .dz-icon { background: var(--success-soft); color: var(--success); }
+  .dz-text { flex: 1; min-width: 0; }
+  .dz-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dz-clear { display: none; background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit;
+              font-size: 13px; font-weight: 600; padding: 4px 6px; border-radius: 6px; }
+  .dz-clear:hover { color: var(--danger); background: var(--danger-soft); }
+  .dropzone.has-file .dz-clear { display: block; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+                     clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .personalize .field-error { display: none; }
+  .personalize .field-error.show { display: block; }
+  .personalize label.jd { margin-top: 14px; }
+  .personalize label.jd span { color: var(--muted); font-weight: 400; }
+  .personalize textarea { resize: vertical; min-height: 92px; }
+{% endblock %}
+{% block content %}
+<div class="card setup">
+  <h1>Start a mock interview</h1>
+  <p class="muted">Questions adapt to your answers: strong answers get harder questions, partial answers get a follow-up.</p>
+
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/interviews" enctype="multipart/form-data" id="setupForm">
+    <div class="row">
+      <div>
+        <label for="role">Role</label>
+        <select id="role" name="role">
+          {% for key, label in ROLE_LABELS.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
         </select>
-        <br><br>
-        <button type="submit">Start Interview</button>
-    </form>
-</body>
-</html>
+      </div>
+      <div>
+        <label for="num_questions">Number of questions</label>
+        <input id="num_questions" name="num_questions" type="number" min="1" max="10" value="{{ default_n }}">
+      </div>
+    </div>
+
+    <label>Interview type</label>
+    <div class="mode-opts">
+      <label><input type="radio" name="mode" value="technical" checked>
+        <span>Technical<small>Concepts, trade-offs, design questions</small></span></label>
+      <label><input type="radio" name="mode" value="behavioral">
+        <span>Behavioral (STAR)<small>"Tell me about a time…" questions</small></span></label>
+    </div>
+
+    <section class="personalize" aria-labelledby="pTitle">
+      <div class="p-head">
+        <span class="p-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg></span>
+        <div>
+          <h3 id="pTitle">Personalize your interview <span class="badge indigo">Recommended</span></h3>
+          <p>Add your resume and the questions will be about <strong>your own projects and skills</strong>. Add a job posting to focus on what that job asks for. Both are optional.</p>
+        </div>
+      </div>
+
+      <label class="dropzone" id="dropzone" for="resume_file">
+        <span class="dz-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg></span>
+        <span class="dz-text">
+          <strong id="dzTitle">Upload your resume</strong>
+          <small id="dzSub">PDF or .txt, up to 5 MB · click or drag the file here</small>
+        </span>
+        <button type="button" class="dz-clear" id="dzClear" aria-label="Remove resume">Remove</button>
+        <input class="visually-hidden" id="resume_file" name="resume_file" type="file" accept=".pdf,.txt">
+      </label>
+      <div class="field-error" id="resumeError" role="alert"></div>
+
+      <label class="jd" for="job_description">Job description <span>(optional)</span></label>
+      <textarea id="job_description" name="job_description" rows="4" maxlength="8000"
+                placeholder="Paste the job posting here to get questions focused on its requirements."></textarea>
+    </section>
+
+    <button class="btn" type="submit" style="width:100%;margin-top:22px" id="startSubmit">Set up interview</button>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  (() => {
+    const MAX_BYTES = 5 * 1024 * 1024;
+    const input = document.getElementById('resume_file');
+    const zone = document.getElementById('dropzone');
+    const title = document.getElementById('dzTitle');
+    const sub = document.getElementById('dzSub');
+    const err = document.getElementById('resumeError');
+    const jd = document.getElementById('job_description');
+    const submit = document.getElementById('startSubmit');
+
+    function showError(msg) { err.textContent = msg; err.classList.toggle('show', !!msg); }
+
+    function refresh() {
+      const f = input.files[0];
+      zone.classList.toggle('has-file', !!f);
+      title.textContent = f ? f.name : 'Upload your resume';
+      sub.textContent = f ? `${(f.size / 1024 / 1024).toFixed(1)} MB · questions will be based on this resume`
+                          : 'PDF or .txt, up to 5 MB · click or drag the file here';
+      const personalized = !!f || jd.value.trim().length > 0;
+      submit.textContent = personalized ? 'Set up personalized interview' : 'Set up interview';
+    }
+
+    function accept(files) {
+      const f = files && files[0];
+      showError('');
+      if (!f) return refresh();
+      if (!/\.(pdf|txt)$/i.test(f.name)) { input.value = ''; showError('Please choose a PDF or .txt file.'); return refresh(); }
+      if (f.size > MAX_BYTES) { input.value = ''; showError('That file is over 5 MB. Please choose a smaller one.'); return refresh(); }
+      refresh();
+    }
+
+    input.addEventListener('change', () => accept(input.files));
+    jd.addEventListener('input', refresh);
+
+    document.getElementById('dzClear').addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      input.value = ''; showError(''); refresh();
+    });
+
+    ['dragenter', 'dragover'].forEach(t => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach(t => zone.addEventListener(t, (e) => { e.preventDefault(); zone.classList.remove('drag'); }));
+    zone.addEventListener('drop', (e) => {
+      if (!e.dataTransfer.files.length) return;
+      try { input.files = e.dataTransfer.files; } catch {}
+      accept(input.files);
+    });
+
+    document.getElementById('setupForm').addEventListener('submit', () => {
+      submit.disabled = true; submit.textContent = 'Setting up…';
+    });
+    refresh();
+  })();
+</script>
+{% endblock %}

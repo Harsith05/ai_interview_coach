@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Home · AI Interview Coach{% endblock %}
+{% block styles %}
+  .welcome { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .welcome h1 { font-size: 32px; }
+  .modes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+  @media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+  .mode { position: relative; display: flex; gap: 18px; align-items: flex-start; padding: 24px; text-decoration: none; color: var(--text);
+          transition: transform .15s, box-shadow .15s, border-color .15s; overflow: hidden; }
+  .mode:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: #c7d2fe; }
+  .mode .ic { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 27px; flex: none; }
+  .mode h3 { margin: 2px 0 6px; font-size: 19px; }
+  .mode p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .mode .go { position: absolute; right: 20px; bottom: 18px; color: var(--primary); font-weight: 700; font-size: 14px; opacity: 0; transition: opacity .15s; }
+  .mode:hover .go { opacity: 1; }
+  .side { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; margin-top: 24px; }
+  @media (max-width: 860px) { .side { grid-template-columns: 1fr; } }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: 0; }
+  .setup { display: flex; gap: 14px; align-items: center; }
+  .setup .ic { font-size: 28px; }
+{% endblock %}
+{% block content %}
+<div class="welcome">
+  <div>
+    <span class="eyebrow">👋 Welcome back</span>
+    <h1 style="margin-top:10px">Hi {{ user.name.split()[0] }}, what would you like to practise?</h1>
+    <p class="muted" style="margin:0">Pick a mode below. Everything is voice-first, so allow microphone access when asked.</p>
+  </div>
+  <a class="btn secondary" href="/dashboard">📈 View progress</a>
+</div>
+
+{% if not has_key %}
+<div class="card setup" style="margin-bottom:22px;border-color:#c7d2fe;background:linear-gradient(180deg,#fafaff,#fff)">
+  <div class="ic">🔑</div>
+  <div style="flex:1"><strong>One quick step: add your Gemini API key</strong>
+    <div class="muted">It's free from Google AI Studio and powers every practice mode. We'll show you exactly how.</div></div>
+  <a class="btn" href="/settings/api-keys">Add API key</a>
+</div>
+{% endif %}
+
+<div class="modes">
+  <a class="card mode" href="/interviews/new"><div class="ic" style="background:#eef2ff">🎯</div>
+    <div><h3>Mock interview</h3><p>Role-specific questions with follow-ups, adaptive difficulty, webcam body-language checks and a graded report.</p></div>
+    <span class="go">Start →</span></a>
+  <a class="card mode" href="/talk"><div class="ic" style="background:#f3e8ff">🎙️</div>
+    <div><h3>Talk</h3><p>Chat freely with your AI companion. It remembers you and helps with your recurring English mistakes.</p></div>
+    <span class="go">Open →</span></a>
+  <a class="card mode" href="/practice"><div class="ic" style="background:#e0f2fe">🗣️</div>
+    <div><h3>Speaking practice</h3><p>Role-play everyday and work situations at your level, with gentle corrections and a speaking report.</p></div>
+    <span class="go">Choose a scenario →</span></a>
+  <a class="card mode" href="/questions"><div class="ic" style="background:#dcfce7">📝</div>
+    <div><h3>My questions</h3><p>Give the AI your own question list. It asks each one out loud and scores your answers.</p></div>
+    <span class="go">Open sets →</span></a>
+</div>
+
+<div class="side">
+  <div class="card">
+    <h2>Recent interviews</h2>
+    {% for iv in recent %}
+      <div class="row"><div><strong>{{ ROLE_LABELS.get(iv.role, iv.role) }}</strong>
+        <div class="hint">{{ MODES.get(iv.mode, iv.mode) }} · {{ (iv.completed_at or iv.created_at)|dt }}</div></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          {% if iv.overall_score is not none %}<span class="badge {{ 'red' if iv.overall_score < 4 else ('orange' if iv.overall_score < 7 else 'green') }}">{{ iv.overall_score|round(1) }}/10</span>{% endif %}
+          <a class="btn secondary small" href="/interviews/{{ iv.id }}/report">Report</a></div></div>
+    {% else %}
+      <p class="muted" style="margin:0">No interviews yet. Your results will appear here.</p>
+    {% endfor %}
+  </div>
+  <div class="card">
+    <h2>Tips</h2>
+    <p style="margin:0 0 10px">🎧 Use headphones so the AI doesn't hear its own voice.</p>
+    <p style="margin:0 0 10px">🎤 Pick your real microphone in each page's <em>Microphone</em> list.</p>
+    <p style="margin:0">⌨️ Press <kbd>Space</kbd> to finish your answer early.</p>
+  </div>
+</div>
+{% endblock %}

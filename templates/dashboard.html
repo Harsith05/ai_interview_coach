@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · AI Interview Coach{% endblock %}
+{% block styles %}
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat .v { font-size: 26px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; margin-bottom: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .chart-wrap { position: relative; height: 260px; }
+  .topic { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions form { margin: 0; }
+  .empty { text-align: center; padding: 36px 16px; }
+{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Hi {{ user.name }} 👋</h1>
+    <p class="muted" style="margin:0">Your interview history and progress.</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn secondary" href="/talk">🎙️ Talk</a>
+    <a class="btn secondary" href="/questions">📝 My questions</a>
+    <a class="btn secondary" href="/practice">🗣️ Speaking practice</a>
+    <a class="btn" href="/interviews/new">+ New interview</a>
+  </div>
+</div>
+
+{% if practice %}
+<div class="card" style="margin-bottom:18px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+    <h2>🗣️ Speaking practice</h2>
+    <span class="muted" style="font-size:14px">{{ practice_stats.count }} completed
+      {% if practice_stats.avg_score is not none %} · average {{ practice_stats.avg_score }}/10{% endif %}
+      {% if practice_stats.latest_level %} · latest level {{ practice_stats.latest_level }}{% endif %}</span>
+  </div>
+  <div class="table-wrap"><table>
+    <tr><th>Date</th><th>Scenario</th><th>Level</th><th>Turns</th><th>Score</th><th></th></tr>
+    {% for p in practice %}
+    {% set sc = p.overall_score %}
+    <tr>
+      <td>{{ (p.completed_at or p.created_at)|dt }}</td>
+      <td>{{ SCENARIOS[p.scenario].title if p.scenario in SCENARIOS else p.scenario }}</td>
+      <td>{{ LEVELS[p.level].title if p.level in LEVELS else p.level }}</td>
+      <td>{{ p.user_turns if p.status == 'completed' else '–' }}</td>
+      <td>{% if p.status != 'completed' %}<span class="badge orange">unfinished</span>
+          {% elif sc is not none %}<span class="badge {{ 'red' if sc < 4 else ('orange' if sc < 7 else 'green') }}">{{ sc|round(1) }}/10</span>
+          {% else %}–{% endif %}</td>
+      <td><div class="actions">
+        {% if p.status == 'completed' %}<a class="btn secondary small" href="/practice/{{ p.id }}/report">Report</a>
+        {% else %}<a class="btn small" href="/practice/{{ p.id }}/live">Continue</a>{% endif %}
+        <form method="post" action="/practice/{{ p.id }}/delete" onsubmit="return confirm('Delete this practice session?')">
+          <button class="btn link small" type="submit">Delete</button></form>
+      </div></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+{% if in_progress %}
+<div class="card" style="margin-bottom:18px">
+  <h2>Unfinished interviews</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Started</th><th>Role</th><th>Type</th><th></th></tr>
+    {% for iv in in_progress %}
+    <tr>
+      <td>{{ iv.created_at|dt }}</td>
+      <td>{{ ROLE_LABELS.get(iv.role, iv.role) }}</td>
+      <td>{{ MODES.get(iv.mode, iv.mode) }}</td>
+      <td><div class="actions">
+        <a class="btn small" href="/interviews/{{ iv.id }}/live">Resume</a>
+        <form method="post" action="/interviews/{{ iv.id }}/delete" onsubmit="return confirm('Delete this unfinished interview?')">
+          <button class="btn secondary small" type="submit">Discard</button></form>
+      </div></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+{% if not completed %}
+<div class="card empty">
+  <h2>No completed interviews yet</h2>
+  <p class="muted">Finish your first mock interview to see scores and trends here.</p>
+  <a class="btn" href="/interviews/new">Start an interview</a>
+</div>
+{% else %}
+<div class="stats">
+  <div class="card stat"><div class="v">{{ stats.count }}</div><div class="l">Interviews completed</div></div>
+  <div class="card stat"><div class="v">{{ stats.avg_score if stats.avg_score is not none else '–' }}<small class="muted">/10</small></div><div class="l">Average score</div></div>
+  <div class="card stat"><div class="v">{{ stats.best_score|round(1) if stats.best_score is not none else '–' }}<small class="muted">/10</small></div><div class="l">Best score</div></div>
+  <div class="card stat"><div class="v">{{ stats.filler_per_min if stats.filler_per_min is not none else '–' }}</div><div class="l">Filler words / min</div></div>
+  <div class="card stat"><div class="v">{{ stats.avg_wpm|int if stats.avg_wpm else '–' }}</div><div class="l">Words / min</div></div>
+  <div class="card stat"><div class="v">{{ stats.eye_contact|int if stats.eye_contact is number else '–' }}%</div><div class="l">Eye contact</div></div>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Progress</h2>
+    <div class="chart-wrap"><canvas id="trend" aria-label="Score trend chart"></canvas></div>
+  </div>
+  <div class="card">
+    <h2>Topics to work on</h2>
+    {% for topic, score, n in weakest %}
+      <div class="topic"><span>{{ topic }}</span>
+        <span class="badge {{ 'red' if score < 4 else ('orange' if score < 7 else 'green') }}">{{ score }}/10 · {{ n }}×</span></div>
+    {% else %}
+      <p class="muted">Graded answers will show your weakest topics here.</p>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>History</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Date</th><th>Role</th><th>Type</th><th>Questions</th><th>Score</th><th></th></tr>
+    {% for iv in completed %}
+    {% set sc = iv.overall_score %}
+    <tr>
+      <td>{{ (iv.completed_at or iv.created_at)|dt }}</td>
+      <td>{{ ROLE_LABELS.get(iv.role, iv.role) }}</td>
+      <td>{{ MODES.get(iv.mode, iv.mode) }}</td>
+      <td>{{ (iv.summary or {}).get('questions_answered', '–') }}</td>
+      <td>{% if sc is not none %}<span class="badge {{ 'red' if sc < 4 else ('orange' if sc < 7 else 'green') }}">{{ sc|round(1) }}/10</span>{% else %}–{% endif %}</td>
+      <td><div class="actions">
+        <a class="btn secondary small" href="/interviews/{{ iv.id }}/report">Report</a>
+        <a class="btn secondary small" href="/interviews/{{ iv.id }}/report.pdf">PDF</a>
+        <form method="post" action="/interviews/{{ iv.id }}/delete" onsubmit="return confirm('Delete this interview permanently?')">
+          <button class="btn link small" type="submit">Delete</button></form>
+      </div></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if completed %}
+<script src="{{ static_url('vendor/chart.umd.min.js') }}"></script>{# Chart.js 4.4.1, served locally #}
+<script>
+  const data = {{ chart_json|safe }};
+  new Chart(document.getElementById('trend'), {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        { label: 'Overall score (/10)', data: data.overall, borderColor: '#4f46e5', backgroundColor: '#4f46e5',
+          tension: .3, yAxisID: 'y', spanGaps: true },
+        { label: 'Filler words / min', data: data.fillers, borderColor: '#b26a00', backgroundColor: '#b26a00',
+          tension: .3, yAxisID: 'y', borderDash: [5, 4], spanGaps: true },
+        { label: 'Eye contact (%)', data: data.eye, borderColor: '#1565c0', backgroundColor: '#1565c0',
+          tension: .3, yAxisID: 'y2', borderDash: [2, 3], spanGaps: true },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y: { min: 0, suggestedMax: 10, title: { display: true, text: 'Score / fillers' } },
+        y2: { position: 'right', min: 0, max: 100, grid: { drawOnChartArea: false }, title: { display: true, text: 'Eye contact %' } },
+      },
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+</script>
+{% endif %}
+{% endblock %}

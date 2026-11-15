@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ ds.title }} · Results{% endblock %}
+{% block styles %}
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat .v { font-size: 24px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 13px; }
+  .q { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; font-size: 14px; }
+  .q .top { display: flex; justify-content: space-between; gap: 10px; }
+  .q .score { font-size: 20px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+  .q p { margin: 6px 0; }
+  .q ul { margin: 4px 0; padding-left: 20px; }
+{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>📝 {{ ds.title }}</h1>
+    <p class="muted" style="margin:0">{{ (ds.completed_at or ds.created_at)|dt }} · feedback {{ 'after each answer' if ds.feedback_mode == 'each' else 'at the end' }}</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn secondary" href="/questions">← My questions</a>
+    {% if ds.set_id %}<a class="btn" href="/questions/{{ ds.set_id }}">Practise again</a>{% endif %}
+  </div>
+</div>
+
+<div class="stats">
+  <div class="card stat"><div class="v">{{ r.overall_score if r.overall_score is not none else '–' }}<small class="muted">/10</small></div><div class="l">Average score</div></div>
+  <div class="card stat"><div class="v">{{ r.answered or 0 }}/{{ r.total or 0 }}</div><div class="l">Answered{% if r.skipped %} · {{ r.skipped }} skipped{% endif %}</div></div>
+  <div class="card stat"><div class="v">{{ r.avg_wpm or '–' }}</div><div class="l">Words / min</div></div>
+  <div class="card stat"><div class="v">{{ r.filler_count or 0 }}</div><div class="l">Filler words</div></div>
+</div>
+
+{% if r.review %}<div class="alert info">Worth practising again: question{{ 's' if r.review|length > 1 else '' }} {{ r.review|join(', ') }}.</div>{% endif %}
+
+<div class="card">
+  {% for q in results %}
+  <div class="q">
+    <div class="top"><strong>Q{{ q.number }}. {{ q.question }}</strong>
+      {% if q.skipped %}<span class="badge">skipped</span>{% elif q.score is not none and q.score is defined %}<span class="score">{{ q.score|round(1) }}/10</span>{% endif %}</div>
+    {% if not q.skipped %}
+      <p><em>Your answer:</em> {{ q.answer or '(nothing recognised)' }}</p>
+      {% if q.spoken_feedback %}<p>💬 {{ q.spoken_feedback }}</p>{% endif %}
+      {% if q.missed %}<p><strong>Missed:</strong></p><ul>{% for m in q.missed %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
+      {% if q.language_tip %}<p>✏️ {{ q.language_tip }}</p>{% endif %}
+      {% if q.better_answer %}<p class="muted"><em>A stronger answer:</em> {{ q.better_answer }}</p>{% endif %}
+      {% if q.fluency and q.fluency.wpm %}<p class="muted" style="font-size:13px">{{ q.fluency.wpm|int }} words/min · {{ q.fluency.filler_count or 0 }} filler words</p>{% endif %}
+    {% endif %}
+  </div>
+  {% else %}<p class="muted">No answers recorded.</p>{% endfor %}
+</div>
+{% endblock %}

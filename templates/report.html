@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Interview report · AI Interview Coach{% endblock %}
+{% block styles %}
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat .v { font-size: 24px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 13px; }
+  .answer-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; font-size: 14px; }
+  .answer-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .answer-card .grade { margin-left: auto; font-size: 20px; font-weight: 700; color: var(--primary); }
+  .answer-card p { margin: 6px 0; }
+  .rubric { color: var(--muted); font-size: 13px; }
+  #feedback h3 { color: var(--primary); margin-top: 22px; }
+  #feedback { line-height: 1.75; }
+{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>{{ ROLE_LABELS.get(iv.role, iv.role) }} · {{ MODES.get(iv.mode, iv.mode) }}</h1>
+    <p class="muted" style="margin:0">{{ (iv.completed_at or iv.created_at)|dt }}</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    {% if staff %}
+    <a class="btn secondary" href="/admin/interview/list">← Admin panel</a>
+    <a class="btn" href="/staff/interview/{{ iv.id }}/pdf">Download PDF</a>
+    {% else %}
+    <a class="btn secondary" href="/dashboard">← Dashboard</a>
+    {% set ungraded = answers | selectattr('transcript') | rejectattr('grade.accuracy') | list %}
+    {% if 'data-report-failed' in (iv.feedback_html or '') or not iv.feedback_html or ungraded %}
+    <form method="post" action="/interviews/{{ iv.id }}/regenerate" style="margin:0"
+          onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Regenerating…'">
+      <button class="btn secondary" type="submit">↻ Regenerate report</button></form>
+    {% endif %}
+    <a class="btn" href="/interviews/{{ iv.id }}/report.pdf">Download PDF</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stats">
+  <div class="card stat"><div class="v">{{ s.overall_score if s.overall_score is not none else '–' }}<small class="muted">/10</small></div><div class="l">Overall score</div></div>
+  <div class="card stat"><div class="v">{{ s.questions_answered }}</div><div class="l">Answers ({{ s.follow_ups or 0 }} follow-ups)</div></div>
+  <div class="card stat"><div class="v">{{ s.avg_wpm|int if s.avg_wpm else '–' }}</div><div class="l">Words / min</div></div>
+  <div class="card stat"><div class="v">{{ s.total_fillers or 0 }}</div><div class="l">Filler words ({{ s.filler_per_min or 0 }}/min)</div></div>
+  <div class="card stat"><div class="v">{{ s.avg_gaze_pct|int if s.avg_gaze_pct is number else '–' }}%</div><div class="l">Eye contact</div></div>
+  <div class="card stat"><div class="v">{{ (s.final_difficulty or '–')|capitalize }}</div><div class="l">Final difficulty</div></div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <h2>Answers</h2>
+  {% include "_answers.html" %}
+</div>
+
+<div class="card">
+  <h2>Coach's report</h2>
+  <div id="feedback">{{ (iv.feedback_html or '')|safe }}</div>
+</div>
+{% endblock %}

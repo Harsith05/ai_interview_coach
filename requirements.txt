@@ -1,0 +1,42 @@
+# Web
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+jinja2>=3.1
+python-dotenv>=1.0
+itsdangerous>=2.1      # signed session cookies
+
+# Database (Postgres via docker compose)
+sqlalchemy>=2.0
+psycopg[binary,pool]>=3.2
+bcrypt>=4.0
+cryptography>=42      # encrypts users' Gemini API keys
+
+# Orchestration + LLM
+langgraph>=1.0
+langgraph-checkpoint-postgres>=2.0
+langchain-core>=1.0
+langchain-google-genai>=4.0
+nh3>=0.2               # sanitizes LLM-generated HTML
+
+# Audio
+pydub>=0.25            # needs ffmpeg on PATH
+faster-whisper>=1.1
+librosa>=0.10
+
+# Vision
+opencv-python>=4.8
+mediapipe==0.10.14
+deepface>=0.0.93
+tensorflow==2.15.0
+
+# NLP
+sentence-transformers>=2.7
+numpy<2
+
+# Resume upload + PDF report
+pypdf>=4.0
+xhtml2pdf>=0.2.11
+
+# Admin panel (/admin). 0.24 is the last release supporting Starlette < 0.50 (FastAPI 0.115)
+sqladmin==0.24.0

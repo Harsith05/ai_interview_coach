@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ scenario.title }} · Speaking practice{% endblock %}
+{% block styles %}
+  .layout { display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  .chat { height: 58vh; min-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; line-height: 1.45; font-size: 15px; }
+  .msg.ai { background: #eef2f7; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .msg.user { background: var(--primary-soft); align-self: flex-end; border-bottom-right-radius: 4px; }
+  .msg .who { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+  .fix { font-size: 13px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #c7d2fe; }
+  .fix .bad { text-decoration: line-through; color: var(--danger); }
+  .fix .good { color: var(--primary); font-weight: 600; }
+  .msg.pending { opacity: .6; font-style: italic; }
+  .status { font-weight: 600; min-height: 24px; margin: 10px 0 6px; }
+  .status.listening { color: var(--danger); }
+  .meter { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+  .meter div { height: 100%; width: 0; background: var(--primary); transition: width .08s; }
+  .controls { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .side label { font-size: 13px; margin: 12px 0 4px; }
+  .side select { font-size: 13px; padding: 6px; }
+  .toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 500; margin-top: 12px; }
+  .toggle input { width: auto; }
+  .turns { font-size: 13px; color: var(--muted); }
+  #report { display: none; margin-top: 18px; }
+{% endblock %}
+{% block content %}
+<h1>🗣️ {{ scenario.title }}</h1>
+<p class="muted">{{ level.title }} · {{ scenario.description }}</p>
+
+<div class="layout">
+  <div class="card">
+    <div class="chat" id="chat">
+      <div class="muted" id="intro">Click <strong>Start talking</strong>. The AI speaks first; when it finishes, just answer out loud.
+        Pause for a moment when you're done and it will reply.</div>
+    </div>
+  </div>
+
+  <div class="card side">
+    <div class="turns" id="turns">Turn 0 of {{ max_turns }}</div>
+    <div class="status" id="status">Ready</div>
+    <div class="meter"><div id="meter"></div></div>
+
+    <div class="controls">
+      <button class="btn" id="startBtn">▶ Start talking</button>
+      <button class="btn secondary" id="doneBtn" disabled>✔ I'm done speaking</button>
+      <button class="btn secondary" id="repeatBtn" disabled>🔁 Repeat AI</button>
+      <button class="btn secondary" id="endBtn" disabled>⏹ End &amp; get feedback</button>
+    </div>
+
+    <label class="toggle"><input type="checkbox" id="handsFree" checked> Hands-free (send when I pause)</label>
+    <label class="toggle"><input type="checkbox" id="showFixes" checked> Show corrections during the chat</label>
+
+    <label for="micSelect">Microphone</label>
+    <select id="micSelect"></select>
+    <label for="voiceSelect">AI voice</label>
+    <select id="voiceSelect"></select>
+    <label for="rate">Speaking speed</label>
+    <input type="range" id="rate" min="0.7" max="1.2" step="0.05" value="{{ level.speech_rate }}">
+    <label for="pause">Wait before replying: <span id="pauseLabel">6 s</span></label>
+    <input type="range" id="pause" min="2" max="10" step="0.5" value="6"
+           title="How long you can pause while speaking before your turn is sent">
+    <div class="muted" style="font-size:12px">Finished early? Click "I'm done speaking".</div>
+  </div>
+</div>
+
+<div id="report" class="card"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.PRACTICE = { id: "{{ ps.id }}", maxTurns: {{ max_turns }} };
+</script>
+<script src="{{ static_url('js/robot.js') }}" data-robot="pip" data-name="Pip · speaking partner"></script>
+<script src="{{ static_url('js/voice-core.js') }}"></script>
+<script src="{{ static_url('js/practice.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: interview_coach_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-coach}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-coach_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-interview_coach}
+    ports:
+      # 5434 on the host, because 5432/5433 are often taken by other Postgres instances
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-coach} -d ${POSTGRES_DB:-interview_coach}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

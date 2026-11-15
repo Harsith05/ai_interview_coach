@@ -1,63 +1,82 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>{{ role|capitalize }} Interview — AI Interview Coach</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <style>
-    body { font-family: Arial, sans-serif; text-align:center; background:#f4f6f9; margin:0; padding:20px; }
-    .container { max-width: 900px; margin: 0 auto; }
-    h2 { color:#222; }
-    .panel { display:flex; gap:20px; justify-content:center; align-items:flex-start; margin-top:20px; }
-    .video { border:6px solid #4CAF50; border-radius:10px; }
-    .question-box { background:#fff; padding:18px; border-radius:10px; width:360px; box-shadow:0 4px 12px rgba(0,0,0,0.06); text-align:left; }
-    .question { font-size:18px; margin-bottom:10px; min-height:72px; }
-    .timer { font-size:22px; color:#d32f2f; font-weight:600; }
-    button { background:#4CAF50; color:#fff; padding:10px 16px; border:none; border-radius:8px; cursor:pointer; font-size:16px; }
-    button:disabled { opacity:0.6; cursor:not-allowed; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>{{ role|capitalize }} Interview — Live (Video + Voice)</h2>
+{% extends "base.html" %}
+{% block title %}{{ ROLE_LABELS.get(interview.role, interview.role) }} interview · AI Interview Coach{% endblock %}
+{% block styles %}
+  /* Wider page than the default 1100px so the webcam can be big. */
+  main { max-width: 1320px; }
+  .panel { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .panel { grid-template-columns: 1fr; } }
+  .video-wrap { display: flex; flex-direction: column; align-items: center; }
+  /* As big as the column allows, but never taller than the screen (keeps 4:3, no cropping). */
+  .video { border: 4px solid var(--primary); border-radius: 12px; background: #000; display: block;
+           aspect-ratio: 4 / 3; width: min(100%, calc((100vh - 230px) * 4 / 3)); height: auto;
+           object-fit: contain; }
+  .video-wrap p { align-self: flex-start; }
+  .question-box { min-width: 0; }
+  .question { font-size: 19px; font-weight: 500; margin: 8px 0 12px; min-height: 84px; }
+  .q-meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .timer { font-size: 22px; color: var(--danger); font-weight: 700; }
+  .controls { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .side-box { margin-top: 10px; font-size: 13px; }
+  #nudge { margin-top: 10px; min-height: 22px; font-size: 14px; font-weight: 600; color: var(--warn); }
+  #feedback-section { display: none; margin-top: 28px; }
+  #feedback-content { line-height: 1.75; }
+  #feedback-content h3 { color: var(--primary); margin-top: 22px; }
+  .answer-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; font-size: 14px; }
+  .answer-card .grade { font-size: 22px; font-weight: 700; }
+  .rubric { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .progressbar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+  .progressbar div { height: 100%; width: 0; background: var(--primary); transition: width .3s; }
+{% endblock %}
+{% block content %}
+<h1>{{ ROLE_LABELS.get(interview.role, interview.role) }} · {{ MODES.get(interview.mode, interview.mode) }}</h1>
+<p class="muted">{{ interview.num_questions }} questions{% if interview.resume_text %} · tailored to your resume{% endif %}{% if interview.job_description %} · focused on the job description{% endif %}</p>
 
-    <div class="panel">
-      <div>
-        <!-- webcam stream -->
-        <img class="video" id="video_stream" src="{{ url_for('video_feed') }}" width="640" height="480" alt="Webcam feed">
-        <p style="margin-top:8px; font-size:14px; color:#555;">Live webcam feed (used for emotion/confidence analysis)</p>
-      </div>
-
-      <div class="question-box">
-        <div>
-          <strong>Question</strong>
-          <div id="question" class="question">Click <strong>Start Interview</strong> to begin. AI will speak the questions aloud.</div>
-        </div>
-
-        <div style="margin-top:6px;">
-          <strong>Timer:</strong> <span id="timer" class="timer">--</span> seconds
-        </div>
-
-        <div style="margin-top:14px;">
-          <button id="startBtn">Start Interview</button>
-          <button id="stopBtn" style="margin-left:8px;" disabled>Stop</button>
-          <button id="nextBtn" disabled>Next</button>
-        </div>
-
-        <div style="margin-top:12px; font-size:13px; color:#666;">
-          <p><strong>Note:</strong> Allow microphone & camera permissions when prompted. Speech will start after you click Start.</p>
-        </div>
-      </div>
-    </div>
+<div class="panel">
+  <div class="video-wrap">
+    {% if server_camera %}
+    <img id="video_stream" class="video" src="/video_feed" alt="Webcam feed">
+    {% else %}
+    <video id="video_stream" class="video" autoplay playsinline muted></video>
+    {% endif %}
+    <p class="muted" style="font-size:13px">Webcam is used for eye-contact, posture and emotion analysis.</p>
   </div>
 
-  <script src="{{ url_for('static', filename='js/interview.js') }}"></script>
-  <script>
-    // pass role to interview.js
-    window.INTERVIEW_ROLE = "{{ role }}";
-  </script>
-</body>
-</html>
+  <div class="card question-box">
+    <div class="q-meta" id="qmeta"><strong>Question</strong></div>
+    <div id="question" class="question">Click <strong>Start interview</strong>. The AI will read each question aloud.</div>
+    <div><strong>Time left:</strong> <span id="timer" class="timer">--</span> s</div>
+    <div class="progressbar"><div id="progress"></div></div>
+    <div class="controls">
+      <button class="btn" id="startBtn">Start interview</button>
+      <button class="btn" id="nextBtn" disabled>Next ›</button>
+      <button class="btn secondary" id="stopBtn" disabled title="Pause; you can resume it from the dashboard">Pause</button>
+    </div>
+    <div id="nudge"></div>
+    <div class="muted" style="font-size:13px;margin-top:10px">Allow microphone and camera access when prompted.</div>
+  </div>
+</div>
 
-
+<div id="feedback-section" class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h2 style="margin:0">📋 Interview feedback</h2>
+    <div id="report-links" style="display:none;gap:8px">
+      <a class="btn secondary small" id="reportLink" href="#">Full report</a>
+      <a class="btn small" id="pdfLink" href="#">Download PDF</a>
+    </div>
+  </div>
+  <div id="summary_box" style="margin-top:16px"></div>
+  <div id="feedback-content"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.INTERVIEW = {
+    id: "{{ interview.id }}",
+    mode: "{{ interview.mode }}",
+    total: {{ interview.num_questions }},
+    serverCamera: {{ 'true' if server_camera else 'false' }},
+  };
+</script>
+<script src="{{ static_url('js/robot.js') }}" data-robot="atlas" data-name="Atlas · your interviewer"></script>
+<script src="{{ static_url('js/interview.js') }}"></script>
+{% endblock %}

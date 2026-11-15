@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Speaking report · AI Interview Coach{% endblock %}
+{% block styles %}
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat .v { font-size: 24px; font-weight: 700; }
+  .stat .l { color: var(--muted); font-size: 13px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .fix { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .fix .bad { text-decoration: line-through; color: var(--danger); }
+  .fix .good { color: var(--primary); font-weight: 600; }
+  .chat { display: flex; flex-direction: column; gap: 8px; }
+  .msg { max-width: 82%; padding: 8px 12px; border-radius: 12px; font-size: 14px; }
+  .msg.ai { background: #eef2f7; align-self: flex-start; }
+  .msg.user { background: var(--primary-soft); align-self: flex-end; }
+  ul { padding-left: 20px; margin: 6px 0; }
+{% endblock %}
+{% block content %}
+{% set s = r.stats or {} %}
+<div class="head">
+  <div>
+    <h1>🗣️ {{ scenario.title }}</h1>
+    <p class="muted" style="margin:0">{{ level.title }} · {{ (ps.completed_at or ps.created_at)|dt }}</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a class="btn secondary" href="/dashboard">← Dashboard</a>
+    <a class="btn" href="/practice">Practice again</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="card stat"><div class="v">{{ r.overall_score|round(1) if r.overall_score is not none else '–' }}<small class="muted">/10</small></div><div class="l">Overall</div></div>
+  <div class="card stat"><div class="v">{{ r.cefr_level or '–' }}</div><div class="l">Estimated level (CEFR)</div></div>
+  <div class="card stat"><div class="v">{{ s.turns or 0 }}</div><div class="l">Your turns · {{ s.words or 0 }} words</div></div>
+  <div class="card stat"><div class="v">{{ s.avg_wpm|int if s.avg_wpm else '–' }}</div><div class="l">Words / min</div></div>
+  <div class="card stat"><div class="v">{{ s.filler_count or 0 }}</div><div class="l">Filler words{% if s.filler_per_min %} ({{ s.filler_per_min }}/min){% endif %}</div></div>
+  <div class="card stat"><div class="v">{{ s.corrections or 0 }}</div><div class="l">Corrections</div></div>
+</div>
+
+<div class="card" style="margin-bottom:18px">
+  <p style="margin-top:0">{{ r.summary }}</p>
+  {% if r.fluency %}<p><strong>Fluency:</strong> {{ r.fluency }}</p>{% endif %}
+  {% if r.grammar %}<p><strong>Grammar:</strong> {{ r.grammar }}</p>{% endif %}
+  {% if r.vocabulary %}<p style="margin-bottom:0"><strong>Vocabulary:</strong> {{ r.vocabulary }}</p>{% endif %}
+</div>
+
+{% if r.strengths or r.improvements %}
+<div class="grid2">
+  <div class="card"><h2>👍 Strengths</h2><ul>{% for x in r.strengths or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+  <div class="card"><h2>💡 Tips</h2><ul>{% for x in r.improvements or [] %}<li>{{ x }}</li>{% endfor %}</ul></div>
+</div>
+{% endif %}
+
+<div class="grid2">
+  <div class="card">
+    <h2>✏️ Corrections</h2>
+    {% for turn in t.turns if turn.correction or turn.better_way %}
+      <div class="fix">
+        {% if turn.correction %}<span class="bad">{{ turn.correction.original }}</span> → <span class="good">{{ turn.correction.corrected }}</span>
+          <div class="muted" style="font-size:13px">{{ turn.correction.explanation }}</div>{% endif %}
+        {% if turn.better_way %}<div style="font-size:13px">More natural: <em>{{ turn.better_way }}</em></div>{% endif %}
+      </div>
+    {% else %}<p class="muted">No corrections. Nice work!</p>{% endfor %}
+  </div>
+  <div class="card">
+    <h2>🧩 Useful phrases</h2>
+    <ul>{% for x in r.useful_phrases or [] %}<li>{{ x }}</li>{% else %}<li class="muted">–</li>{% endfor %}</ul>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Conversation</h2>
+  <div class="chat">
+    {% for m in t.messages %}<div class="msg {{ m.role }}">{{ m.text }}</div>{% endfor %}
+  </div>
+</div>
+{% endblock %}
