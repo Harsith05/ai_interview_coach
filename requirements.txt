@@ -29,6 +29,7 @@ opencv-python>=4.8
 mediapipe==0.10.14
 deepface>=0.0.93
 tensorflow==2.15.0
+tf-keras==2.15.0       # deepface sets TF_USE_LEGACY_KERAS=1, so tensorflow.keras must come from tf_keras
 
 # NLP
 sentence-transformers>=2.7
