@@ -20,6 +20,8 @@
       --shadow-lg: 0 10px 40px rgba(79,70,229,.14);
     }
     * { box-sizing: border-box; }
+    /* Elements hidden with the `hidden` attribute stay hidden even if their CSS sets display: flex/grid. */
+    [hidden] { display: none !important; }
     html { scroll-behavior: smooth; }
     body { margin: 0; font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
            background: var(--bg); color: var(--text); line-height: 1.55; -webkit-font-smoothing: antialiased;

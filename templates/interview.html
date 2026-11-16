@@ -66,7 +66,7 @@
 {% endblock %}
 {% block content %}
 <h1>{{ ROLE_LABELS.get(interview.role, interview.role) }} · {{ MODES.get(interview.mode, interview.mode) }}</h1>
-<p class="muted">{{ interview.num_questions }} questions{% if interview.resume_text %} · tailored to your resume{% endif %}{% if interview.job_description %} · focused on the job description{% endif %}</p>
+<p class="muted">{{ interview.num_questions }} questions{% if interview.seniority %} · {{ SENIORITY.get(interview.seniority, interview.seniority) }}{% endif %}{% if interview.focus_topics %} · 🎯 practising {{ interview.focus_topics|join(', ') }}{% endif %}{% if interview.resume_text %} · tailored to your resume{% endif %}{% if interview.job_description %} · focused on the job description{% endif %}</p>
 
 <div class="panel">
   <div class="video-wrap">

@@ -34,6 +34,25 @@ ROLE_LABELS = {
 }
 MODES = {"technical": "Technical", "behavioral": "Behavioral (STAR)"}
 
+# Experience level of the candidate: shapes the questions, how strictly answers are graded, and the report.
+SENIORITY = {
+    "fresher": "Fresher / student",
+    "junior": "Junior (1–2 yrs)",
+    "mid": "Mid-level (3–5 yrs)",
+    "senior": "Senior (5+ yrs)",
+}
+SENIORITY_GUIDE = {
+    "fresher": "a student or new graduate with little or no work experience. Focus on fundamentals, definitions "
+               "and college projects or internships; avoid questions that need production experience.",
+    "junior": "about 1-2 years of experience. Fundamentals plus practical, hands-on questions about tools and "
+              "day-to-day work; light trade-off questions.",
+    "mid": "about 3-5 years of experience. Applied trade-offs, debugging real problems, owning features end to end "
+           "and some design questions.",
+    "senior": "5+ years of experience. Architecture and system design, scalability, trade-offs under ambiguity, "
+              "technical leadership and mentoring.",
+}
+DEFAULT_SENIORITY = "junior"
+
 
 # Gemini API keys belong to each user (added on the API keys page), not to the server.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")

@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.config import get_stream_writer
 from langgraph.types import Send, interrupt
 
-from coach.config import MAX_FOLLOW_UPS, ROLE_LABELS
+from coach.config import MAX_FOLLOW_UPS, ROLE_LABELS, SENIORITY, SENIORITY_GUIDE
 from coach.db import db_session
 from coach.graph import jobs
 from coach.graph.llm_schemas import BatchGrades, FollowUp, QuestionPlan
@@ -19,6 +19,14 @@ from coach.services.llm import clean_html, get_llm, structured
 log = logging.getLogger(__name__)
 
 LEVELS = ["easy", "medium", "hard"]
+
+
+def _level_line(state: InterviewState) -> str:
+    """'Candidate level: …' for prompts; empty for interviews created before levels existed."""
+    level = state.get("seniority")
+    if level not in SENIORITY:
+        return ""
+    return f"Candidate level: {SENIORITY[level]}, i.e. {SENIORITY_GUIDE[level]}"
 
 
 def _progress(text: str, stage: str | None = None) -> None:
@@ -42,7 +50,12 @@ no code blocks, no lists inside the question. Questions within a level must cove
 - medium: applied understanding, trade-offs, "how would you..."
 - hard: deep dives, edge cases, system/design-level reasoning
 If a resume is given, tailor several questions to the candidate's actual projects and skills. \
-If a job description is given, focus on the skills it asks for."""
+If a job description is given, focus on the skills it asks for. \
+If a candidate level is given, pitch every level (easy, medium, hard) relative to that experience: \
+a senior's "easy" question is harder than a fresher's. \
+If focus topics are given, the candidate is practising topics they scored low on before: make most \
+questions about those topics (approached from different angles) and use the rest for closely related topics. \
+Give every question a short, reusable topic name (2-4 words, e.g. "Regularization", "React state")."""
 
 
 def plan_questions(state: InterviewState) -> dict:
@@ -63,6 +76,10 @@ def plan_questions(state: InterviewState) -> dict:
         f"Interview type: {behavioral if mode == 'behavioral' else 'technical'}",
         f"Write exactly {per_level} questions for each level: easy, medium, hard.",
     ]
+    if level := _level_line(state):
+        parts.append(level)
+    if state.get("focus_topics"):
+        parts.append("Focus topics (scored low before): " + ", ".join(state["focus_topics"]))
     if state.get("resume_text"):
         parts.append(f"Candidate resume:\n{state['resume_text']}")
     if state.get("job_description"):
@@ -192,7 +209,7 @@ def generate_follow_up(state: InterviewState) -> dict:
             SystemMessage(FOLLOW_UP_PROMPT),
             HumanMessage(f"Original question: {cur['question']}\n"
                          f"Key points of a strong answer: {'; '.join(cur.get('key_points', []))}\n"
-                         f"Candidate's answer: {transcript}"),
+                         f"Candidate's answer: {transcript}\n{_level_line(state)}"),
         ])
     except Exception as e:
         log.warning("Follow-up generation failed: %s", e)
@@ -246,6 +263,8 @@ GRADER_PROMPT = """You are a strict but fair interview grader. Grade each of the
 answers below (automatic transcripts, so ignore minor transcription errors and filler words). Base \
 each grade only on what the candidate actually said in that answer. Off-topic answers get 1s and an \
 overall score of 0-1. For behavioral answers, fill the `star` field; for technical answers leave it empty. \
+If a candidate level is given, judge depth against what is expected at that level: the same answer can be \
+strong for a fresher and shallow for a senior. \
 Return exactly one grade per answer, with its turn number."""
 
 _EMPTY_GRADE = {"overall": 0.0, "accuracy": 1, "depth": 1, "structure": 1, "communication": 1,
@@ -270,6 +289,8 @@ def grade_answers(state: InterviewState) -> dict:
             f"Model answer: {r.get('ideal', '')}\nCandidate's answer: {r['transcript']}"
         )
     if blocks:
+        if level := _level_line(state):
+            blocks.insert(0, level)
         try:
             out: BatchGrades = structured(BatchGrades).invoke(
                 [SystemMessage(GRADER_PROMPT), HumanMessage("\n\n".join(blocks))])
@@ -347,6 +368,7 @@ def generate_feedback(state: InterviewState) -> dict:
     _progress("Writing your feedback report…", stage="write")
     s = state.get("summary", {})
     lines = [f"Role: {ROLE_LABELS.get(state.get('role'), state.get('role'))} | Interview type: {state.get('mode')}",
+             _level_line(state) + (" Judge and advise relative to this level." if _level_line(state) else ""),
              f"Summary metrics: {s}", ""]
     for r in results:
         g = r.get("grade") or {}

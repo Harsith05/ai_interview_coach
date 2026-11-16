@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}My topics · AI Interview Coach{% endblock %}
+{% block styles %}
+  .summary { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .summary .chip { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--border);
+                   border-radius: 12px; padding: 10px 14px; font-size: 14px; box-shadow: var(--shadow); }
+  .summary .chip strong { font-size: 20px; }
+  .group { margin-bottom: 22px; }
+  .group h2 { display: flex; align-items: center; gap: 8px; }
+  .topic-row { display: grid; grid-template-columns: auto minmax(0, 1fr) 220px auto; gap: 14px; align-items: center;
+               padding: 14px 4px; border-bottom: 1px solid var(--border); }
+  .topic-row:last-child { border-bottom: 0; }
+  .topic-row input[type=checkbox] { width: 18px; height: 18px; }
+  .t-name { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .t-meta { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .t-missed { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+  .t-missed b { color: var(--warn); font-weight: 600; }
+  .score { display: grid; gap: 5px; }
+  .score-top { display: flex; justify-content: space-between; font-size: 13px; }
+  .score-top strong { font-size: 15px; }
+  .bar { height: 8px; background: #edf0f7; border-radius: 999px; overflow: hidden; }
+  .bar div { height: 100%; border-radius: 999px; }
+  .bar .red { background: #e11d48; } .bar .orange { background: #f59e0b; }
+  .bar .indigo { background: var(--primary); } .bar .green { background: #16a34a; }
+  .trend.up { color: var(--success); font-weight: 600; } .trend.down { color: var(--danger); font-weight: 600; }
+  .badge.indigo { background: var(--primary-soft); color: var(--primary); }
+  .actionbar { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+               justify-content: space-between; background: #fff; border: 1px solid #c7d2fe; border-radius: 14px;
+               padding: 12px 16px; box-shadow: 0 10px 30px rgba(79,70,229,.15); margin-top: 8px; }
+  .actionbar .hint { margin: 0; }
+  details.strong-list summary { cursor: pointer; font-weight: 700; font-size: 17px; list-style: none; }
+  details.strong-list summary::-webkit-details-marker { display: none; }
+  @media (max-width: 760px) {
+    .topic-row { grid-template-columns: auto minmax(0, 1fr); }
+    .topic-row .score, .topic-row .row-btn { grid-column: 2; }
+    .topic-row .row-btn { justify-self: start; }
+  }
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>My topics</h1>
+    <p>Every graded answer from your mock interviews, grouped by topic. Practise the weak ones until they turn green.</p>
+  </div>
+  <a class="btn secondary" href="/dashboard">← Dashboard</a>
+</div>
+
+{% if not stats %}
+  <div class="card" style="text-align:center;padding:40px 24px">
+    <div style="font-size:40px">🎯</div>
+    <h2 style="margin-top:8px">No topics yet</h2>
+    <p class="muted">Finish a mock interview and every question's topic will appear here with your score, so you can see what to practise.</p>
+    <a class="btn" href="/interviews/new">Start a mock interview</a>
+  </div>
+{% else %}
+  <div class="summary">
+    {% for key, (label, colour, _) in STATUS.items() %}
+      <div class="chip"><span class="badge {{ colour }}">{{ label }}</span><strong>{{ groups[key]|length }}</strong></div>
+    {% endfor %}
+  </div>
+
+  {% macro topic_row(t, selectable=True) %}
+    <div class="topic-row">
+      {% if selectable %}<input type="checkbox" name="topic" value="{{ t.key }}" aria-label="Select {{ t.topic }}">{% else %}<span></span>{% endif %}
+      <div>
+        <div class="t-name">{{ t.topic }} <span class="badge {{ t.badge }}">{{ t.status_label }}</span>
+          <span class="badge">{{ ROLE_LABELS.get(t.role, t.role) }}</span></div>
+        <div class="t-meta">{{ t.count }} answer{{ 's' if t.count != 1 }} · {{ t.interviews }} interview{{ 's' if t.interviews != 1 }} · last {{ t.last_seen|dt }}</div>
+        {% if t.missed and t.status != 'strong' %}
+          <div class="t-missed"><b>Missed last time:</b> {{ t.missed|join('; ') }}</div>
+        {% elif t.improvement and t.status != 'strong' %}
+          <div class="t-missed"><b>Tip:</b> {{ t.improvement }}</div>
+        {% endif %}
+      </div>
+      <div class="score">
+        <div class="score-top"><span>Average <strong>{{ t.avg }}</strong>/10</span>
+          {% if t.trend is not none %}
+            <span class="trend {{ 'up' if t.trend > 0 else ('down' if t.trend < 0 else '') }}">{{ '▲' if t.trend > 0 else ('▼' if t.trend < 0 else '■') }} {{ '%+.1f'|format(t.trend) }}</span>
+          {% else %}<span class="muted">last {{ t.last }}</span>{% endif %}
+        </div>
+        <div class="bar"><div class="{{ t.badge }}" style="width:{{ (t.avg * 10)|round|int }}%"></div></div>
+      </div>
+      {% if selectable %}
+        <button class="btn secondary small row-btn" type="submit" name="only" value="{{ t.key }}">Practise</button>
+      {% else %}<span></span>{% endif %}
+    </div>
+  {% endmacro %}
+
+  <form method="post" action="/interviews/practice-topics" id="practiceForm"
+        onsubmit="this.querySelectorAll('button[type=submit]').forEach(b => b.disabled = true)">
+    {% set attention = groups['weak'] + groups['needs_work'] %}
+    {% if attention %}
+    <div class="card group">
+      <h2>🔴 Needs attention</h2>
+      {% for t in attention %}{{ topic_row(t) }}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if groups['improving'] %}
+    <div class="card group">
+      <h2>📈 Improving</h2>
+      {% for t in groups['improving'] %}{{ topic_row(t) }}{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if groups['strong'] %}
+    <div class="card group">
+      <details class="strong-list" {{ 'open' if not attention and not groups['improving'] }}>
+        <summary>✅ Strong topics ({{ groups['strong']|length }}) <span class="muted" style="font-weight:400;font-size:14px">· show</span></summary>
+        {% for t in groups['strong'] %}{{ topic_row(t, False) }}{% endfor %}
+      </details>
+    </div>
+    {% endif %}
+
+    {% if attention or groups['improving'] %}
+    <div class="actionbar">
+      <p class="hint" id="selHint">Tick up to {{ max_focus }} topics to practise together in one mock interview.</p>
+      <button class="btn" type="submit" id="practiceSelected" disabled>🎯 Practise selected</button>
+    </div>
+    {% endif %}
+  </form>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+  (() => {
+    const form = document.getElementById('practiceForm');
+    if (!form) return;
+    const MAX = {{ max_focus }};
+    const boxes = [...form.querySelectorAll('input[name=topic]')];
+    const btn = document.getElementById('practiceSelected');
+    const hint = document.getElementById('selHint');
+    const update = () => {
+      const n = boxes.filter(b => b.checked).length;
+      boxes.forEach(b => { b.disabled = !b.checked && n >= MAX; });
+      if (btn) {
+        btn.disabled = n === 0;
+        btn.textContent = n ? `🎯 Practise ${n} topic${n > 1 ? 's' : ''}` : '🎯 Practise selected';
+      }
+      if (hint) hint.textContent = n >= MAX ? `Maximum ${MAX} topics per interview.`
+        : `Tick up to ${MAX} topics to practise together in one mock interview.`;
+    };
+    boxes.forEach(b => b.addEventListener('change', update));
+    update();
+  })();
+</script>
+{% endblock %}

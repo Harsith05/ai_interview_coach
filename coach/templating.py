@@ -1,9 +1,10 @@
 from fastapi.templating import Jinja2Templates
 
-from coach.config import BASE_DIR, MODES, ROLE_LABELS
+from coach.config import BASE_DIR, DEFAULT_SENIORITY, MODES, ROLE_LABELS, SENIORITY
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-templates.env.globals.update(ROLE_LABELS=ROLE_LABELS, MODES=MODES)
+templates.env.globals.update(ROLE_LABELS=ROLE_LABELS, MODES=MODES, SENIORITY=SENIORITY,
+                             DEFAULT_SENIORITY=DEFAULT_SENIORITY)
 
 STATIC_DIR = BASE_DIR / "static"
 

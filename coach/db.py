@@ -61,6 +61,8 @@ def _migrate():
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT false",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE interviews ADD COLUMN IF NOT EXISTS seniority VARCHAR(20)",
+        "ALTER TABLE interviews ADD COLUMN IF NOT EXISTS focus_topics JSON",
     ]
     with engine.begin() as conn:
         for sql in statements:

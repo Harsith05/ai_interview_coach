@@ -14,6 +14,7 @@ from coach.services.llm import as_user
 from coach.graph.builder import interview_graph
 from coach.models import Interview, PracticeSession, User
 from coach.practice.scenarios import LEVELS, SCENARIOS
+from coach.services import topics as topic_svc
 from coach.services.report_pdf import render_pdf
 from coach.templating import templates
 
@@ -49,14 +50,9 @@ def dashboard(request: Request, user: User = Depends(require_user_page), db: Ses
         "eye": [(iv.summary or {}).get("avg_gaze_pct") for iv in chrono],
     }
 
-    # Weakest topics across all completed interviews (lowest average grade).
-    topic_scores: dict[str, list[float]] = {}
-    for iv in completed:
-        for a in iv.answers:
-            topic = (a.result or {}).get("topic")
-            if topic and a.grade is not None:
-                topic_scores.setdefault(topic, []).append(a.grade)
-    weakest = sorted(((t, _avg(s), len(s)) for t, s in topic_scores.items()), key=lambda x: x[1])[:5]
+    # Weak-topic tracker (all completed interviews): what to practise next.
+    all_topics = topic_svc.topic_stats(db, user.id)
+    weakest = topic_svc.to_practise(all_topics)[:5]
 
     summaries = [iv.summary or {} for iv in completed]
     stats = {
@@ -77,7 +73,8 @@ def dashboard(request: Request, user: User = Depends(require_user_page), db: Ses
     }
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user, "completed": completed, "in_progress": in_progress, "stats": stats,
-        "weakest": weakest, "chart_json": json.dumps(chart),
+        "weakest": weakest, "topic_count": len(all_topics), "max_focus": topic_svc.MAX_FOCUS_TOPICS,
+        "chart_json": json.dumps(chart),
         "practice": practice, "practice_stats": practice_stats,
         "SCENARIOS": SCENARIOS, "LEVELS": LEVELS,
     })
@@ -89,8 +86,12 @@ def report(request: Request, interview_id: str, user: User = Depends(require_use
     iv = _own(db, interview_id, user)
     if iv.status != "completed":
         return RedirectResponse(f"/interviews/{iv.id}/live", status_code=303)
+    answers = [a.result for a in iv.answers]
+    graded = [r for r in answers if (r.get("grade") or {}).get("overall") is not None and r.get("transcript")]
+    lowest = min(graded, key=lambda r: r["grade"]["overall"], default=None)
     return templates.TemplateResponse(request, "report.html", {
-        "user": user, "iv": iv, "answers": [a.result for a in iv.answers], "s": iv.summary or {},
+        "user": user, "iv": iv, "answers": answers, "s": iv.summary or {},
+        "lowest_q": lowest.get("number") if lowest else None,
     })
 
 

@@ -2,8 +2,9 @@
 {% block title %}New interview · AI Interview Coach{% endblock %}
 {% block styles %}
   .setup { max-width: 640px; margin: 8px auto; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .row { display: grid; grid-template-columns: 1.35fr 1.2fr 0.75fr; gap: 14px; }
   @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
+  .level-hint { font-size: 12.5px; color: var(--muted); margin-top: 6px; min-height: 18px; }
   .mode-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .mode-opts label { margin: 0; font-weight: 500; border: 1px solid var(--border); border-radius: 8px;
                      padding: 12px; cursor: pointer; display: flex; gap: 8px; align-items: flex-start; }
@@ -60,10 +61,17 @@
         </select>
       </div>
       <div>
-        <label for="num_questions">Number of questions</label>
+        <label for="seniority">Experience level</label>
+        <select id="seniority" name="seniority">
+          {% for key, label in SENIORITY.items() %}<option value="{{ key }}" {{ 'selected' if key == (last_seniority or DEFAULT_SENIORITY) }}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="num_questions">Questions</label>
         <input id="num_questions" name="num_questions" type="number" min="1" max="10" value="{{ default_n }}">
       </div>
     </div>
+    <div class="level-hint" id="levelHint" aria-live="polite"></div>
 
     <label>Interview type</label>
     <div class="mode-opts">
@@ -113,6 +121,18 @@
     const err = document.getElementById('resumeError');
     const jd = document.getElementById('job_description');
     const submit = document.getElementById('startSubmit');
+
+    // One-line explanation of what the chosen experience level changes.
+    const LEVEL_HINTS = {
+      fresher: 'Fundamentals and your college projects or internships. Graded as a new graduate.',
+      junior: 'Fundamentals plus hands-on, practical questions. Graded for 1–2 years of experience.',
+      mid: 'Trade-offs, debugging and owning features end to end. Graded for 3–5 years of experience.',
+      senior: 'System design, scalability and leadership. Graded against senior expectations.',
+    };
+    const level = document.getElementById('seniority');
+    const showHint = () => { document.getElementById('levelHint').textContent = LEVEL_HINTS[level.value] || ''; };
+    level.addEventListener('change', showHint);
+    showHint();
 
     function showError(msg) { err.textContent = msg; err.classList.toggle('show', !!msg); }
 

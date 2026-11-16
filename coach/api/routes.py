@@ -13,7 +13,8 @@ from coach.api.streaming import acquire, run_streaming
 from coach.api.account_routes import key_required_redirect
 from coach import apikeys
 from coach.auth import current_user_optional, require_user_api, require_user_page
-from coach.config import DOMAIN_FILES, ENABLE_SERVER_CAMERA, MODES, QUESTIONS_PER_INTERVIEW, UPLOAD_DIR
+from coach.config import (DEFAULT_SENIORITY, DOMAIN_FILES, ENABLE_SERVER_CAMERA, MODES, QUESTIONS_PER_INTERVIEW,
+                          SENIORITY, UPLOAD_DIR)
 from coach.db import get_db
 from coach.graph import jobs
 from coach.graph.builder import interview_graph
@@ -62,11 +63,14 @@ def home(request: Request, user: User | None = Depends(current_user_optional), d
 
 
 @pages.get("/interviews/new")
-def new_interview(request: Request, user: User = Depends(require_user_page)):
+def new_interview(request: Request, user: User = Depends(require_user_page), db: Session = Depends(get_db)):
     if (r := key_required_redirect(user)) is not None:
         return r
+    last = (db.query(Interview.seniority).filter(Interview.user_id == user.id, Interview.seniority.isnot(None))
+            .order_by(Interview.created_at.desc()).first())
     return templates.TemplateResponse(request, "index.html", {
         "user": user, "error": None, "default_n": QUESTIONS_PER_INTERVIEW,
+        "last_seniority": last[0] if last else None,
     })
 
 
@@ -75,6 +79,7 @@ async def create_interview(
     request: Request,
     role: str = Form("ml"),
     mode: str = Form("technical"),
+    seniority: str = Form(DEFAULT_SENIORITY),
     num_questions: int = Form(QUESTIONS_PER_INTERVIEW),
     job_description: str = Form(""),
     resume_file: UploadFile | None = File(None),
@@ -85,10 +90,10 @@ async def create_interview(
         return r
     def fail(msg: str):
         return templates.TemplateResponse(request, "index.html", {
-            "user": user, "error": msg, "default_n": num_questions}, status_code=400)
+            "user": user, "error": msg, "default_n": num_questions, "last_seniority": seniority}, status_code=400)
 
-    if role not in DOMAIN_FILES or mode not in MODES:
-        return fail("Please choose a valid role and interview type.")
+    if role not in DOMAIN_FILES or mode not in MODES or seniority not in SENIORITY:
+        return fail("Please choose a valid role, experience level and interview type.")
     if not 1 <= num_questions <= 10:
         return fail("Number of questions must be between 1 and 10.")
     resume_text = ""
@@ -99,7 +104,7 @@ async def create_interview(
             return fail(str(e))
 
     iv = Interview(id=uuid.uuid4().hex, user_id=user.id, role=role, mode=mode, num_questions=num_questions,
-                   resume_text=resume_text or None,
+                   seniority=seniority, resume_text=resume_text or None,
                    job_description=job_description.strip()[:MAX_JD_CHARS] or None)
     db.add(iv)
     return RedirectResponse(f"/interviews/{iv.id}/live", status_code=303)
@@ -180,7 +185,8 @@ def start_interview(interview_id: str, user: User = Depends(require_user_api), d
         raise HTTPException(409, "This interview has already finished.")
     lock = acquire(interview_id)
     initial = {"interview_id": iv.id, "role": iv.role, "mode": iv.mode, "num_questions": iv.num_questions,
-               "resume_text": iv.resume_text or "", "job_description": iv.job_description or ""}
+               "resume_text": iv.resume_text or "", "job_description": iv.job_description or "",
+               "seniority": iv.seniority or "", "focus_topics": iv.focus_topics or []}
 
     def work(emit):
         snap = interview_graph.get_state(_config(interview_id))

@@ -43,6 +43,8 @@ class InterviewState(TypedDict, total=False):
     num_questions: int            # main questions (follow-ups come on top)
     resume_text: str
     job_description: str
+    seniority: str                # fresher | junior | mid | senior (missing on older interviews)
+    focus_topics: list[str]       # weak topics this interview should concentrate on
 
     bank: dict[str, list[QuestionItem]]   # planned questions by difficulty
     asked: list[str]                      # question texts already used

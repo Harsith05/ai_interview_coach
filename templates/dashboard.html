@@ -9,6 +9,7 @@
   @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
   .chart-wrap { position: relative; height: 260px; }
   .topic { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .trend-mini { font-size: 11px; } .trend-mini.up { color: var(--success); } .trend-mini.down { color: var(--danger); }
   .actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .actions form { margin: 0; }
   .empty { text-align: center; padding: 36px 16px; }
@@ -68,7 +69,7 @@
     <tr>
       <td>{{ iv.created_at|dt }}</td>
       <td>{{ ROLE_LABELS.get(iv.role, iv.role) }}</td>
-      <td>{{ MODES.get(iv.mode, iv.mode) }}</td>
+      <td>{{ MODES.get(iv.mode, iv.mode) }}{% if iv.seniority %}<br><small class="muted">{{ SENIORITY.get(iv.seniority, iv.seniority) }}</small>{% endif %}</td>
       <td><div class="actions">
         <a class="btn small" href="/interviews/{{ iv.id }}/live">Resume</a>
         <form method="post" action="/interviews/{{ iv.id }}/delete" onsubmit="return confirm('Delete this unfinished interview?')">
@@ -102,13 +103,24 @@
     <div class="chart-wrap"><canvas id="trend" aria-label="Score trend chart"></canvas></div>
   </div>
   <div class="card">
-    <h2>Topics to work on</h2>
-    {% for topic, score, n in weakest %}
-      <div class="topic"><span>{{ topic }}</span>
-        <span class="badge {{ 'red' if score < 4 else ('orange' if score < 7 else 'green') }}">{{ score }}/10 · {{ n }}×</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <h2>Topics to work on</h2>
+      {% if topic_count %}<a href="/topics" style="font-size:13.5px;font-weight:600;text-decoration:none">All {{ topic_count }} topics →</a>{% endif %}
+    </div>
+    {% for t in weakest %}
+      <div class="topic">
+        <span>{{ t.topic }}{% if t.trend is not none %} <span class="trend-mini {{ 'up' if t.trend > 0 else 'down' if t.trend < 0 else '' }}" title="Change vs. earlier answers">{{ '▲' if t.trend > 0 else '▼' if t.trend < 0 else '' }}</span>{% endif %}</span>
+        <span class="badge {{ t.badge }}">{{ t.avg }}/10 · {{ t.count }}×</span></div>
     {% else %}
-      <p class="muted">Graded answers will show your weakest topics here.</p>
+      <p class="muted">{% if topic_count %}All your topics are strong. 🎉 Keep it up!{% else %}Graded answers will show your weakest topics here.{% endif %}</p>
     {% endfor %}
+    {% if weakest %}
+    <form method="post" action="/interviews/practice-topics" style="margin:14px 0 0"
+          onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Preparing…'">
+      {% for t in weakest[:max_focus] %}<input type="hidden" name="topic" value="{{ t.key }}">{% endfor %}
+      <button class="btn small" type="submit" style="width:100%">🎯 Practise my {{ [weakest|length, max_focus]|min }} weakest topic{{ 's' if weakest|length > 1 }}</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 
@@ -121,7 +133,7 @@
     <tr>
       <td>{{ (iv.completed_at or iv.created_at)|dt }}</td>
       <td>{{ ROLE_LABELS.get(iv.role, iv.role) }}</td>
-      <td>{{ MODES.get(iv.mode, iv.mode) }}</td>
+      <td>{{ MODES.get(iv.mode, iv.mode) }}{% if iv.seniority %}<br><small class="muted">{{ SENIORITY.get(iv.seniority, iv.seniority) }}</small>{% endif %}</td>
       <td>{{ (iv.summary or {}).get('questions_answered', '–') }}</td>
       <td>{% if sc is not none %}<span class="badge {{ 'red' if sc < 4 else ('orange' if sc < 7 else 'green') }}">{{ sc|round(1) }}/10</span>{% else %}–{% endif %}</td>
       <td><div class="actions">

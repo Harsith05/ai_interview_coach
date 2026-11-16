@@ -12,12 +12,40 @@
   .rubric { color: var(--muted); font-size: 13px; }
   #feedback h3 { color: var(--primary); margin-top: 22px; }
   #feedback { line-height: 1.75; }
+
+  /* Ask about my feedback */
+  #ask { margin-top: 18px; scroll-margin-top: 80px; }
+  .chat-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .chat-head h2 { margin: 0; }
+  .chat-head p { margin: 4px 0 0; font-size: 14px; }
+  .chat-log { display: flex; flex-direction: column; gap: 12px; margin: 16px 0 12px; max-height: 520px; overflow-y: auto;
+              padding-right: 4px; }
+  .chat-log:empty { display: none; }
+  .msg { max-width: 85%; padding: 11px 14px; border-radius: 14px; font-size: 14.5px; line-height: 1.6; word-wrap: break-word; }
+  .msg p { margin: 0 0 8px; } .msg p:last-child { margin: 0; }
+  .msg ul { margin: 4px 0 8px; padding-left: 20px; } .msg li { margin: 2px 0; }
+  .msg.user { align-self: flex-end; background: var(--grad); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.coach { align-self: flex-start; background: #f4f6fc; border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .msg.coach .who { font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+  .msg.error { align-self: flex-start; background: var(--danger-soft); color: #9f1239; border: 1px solid #fecdd3; }
+  .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: #a5b4fc; animation: blink 1.2s infinite both; }
+  .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 12px; }
+  .chat-suggest button { border: 1px solid #c7d2fe; background: var(--primary-soft); color: var(--primary); font: inherit;
+                         font-size: 13.5px; font-weight: 500; padding: 7px 12px; border-radius: 999px; cursor: pointer; text-align: left; }
+  .chat-suggest button:hover { background: #e0e7ff; }
+  .chat-form { display: flex; gap: 8px; align-items: flex-end; }
+  .chat-form textarea { resize: none; min-height: 46px; max-height: 160px; line-height: 1.5; }
+  .chat-form .btn { flex: none; height: 46px; }
+  .chat-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
 {% endblock %}
 {% block content %}
 <div class="head">
   <div>
     <h1>{{ ROLE_LABELS.get(iv.role, iv.role) }} · {{ MODES.get(iv.mode, iv.mode) }}</h1>
-    <p class="muted" style="margin:0">{{ (iv.completed_at or iv.created_at)|dt }}</p>
+    <p class="muted" style="margin:0">{{ (iv.completed_at or iv.created_at)|dt }}{% if iv.seniority %} · {{ SENIORITY.get(iv.seniority, iv.seniority) }}{% endif %}{% if iv.focus_topics %} · 🎯 {{ iv.focus_topics|join(', ') }}{% endif %}</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     {% if staff %}
@@ -31,6 +59,7 @@
           onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Regenerating…'">
       <button class="btn secondary" type="submit">↻ Regenerate report</button></form>
     {% endif %}
+    <a class="btn secondary" href="#ask">💬 Ask your coach</a>
     <a class="btn" href="/interviews/{{ iv.id }}/report.pdf">Download PDF</a>
     {% endif %}
   </div>
@@ -54,4 +83,33 @@
   <h2>Coach's report</h2>
   <div id="feedback">{{ (iv.feedback_html or '')|safe }}</div>
 </div>
+
+{% if not staff %}
+<div class="card" id="ask">
+  <div class="chat-head">
+    <div>
+      <h2>💬 Ask about your feedback</h2>
+      <p class="muted">Ask your coach anything about this interview: a grade, a better answer, or what to practise next.</p>
+    </div>
+  </div>
+  <div class="chat-log" id="chatLog" aria-live="polite"></div>
+  <div class="chat-suggest" id="chatSuggest">
+    {% if s.overall_score is not none %}<button type="button">Why did I get {{ s.overall_score }}/10 overall?</button>{% endif %}
+    {% if lowest_q %}<button type="button">How can I improve my answer to Q{{ lowest_q }}?</button>
+    <button type="button">Give me a model answer for Q{{ lowest_q }}</button>{% endif %}
+    <button type="button">What should I practise next?</button>
+  </div>
+  <form class="chat-form" id="chatForm">
+    <textarea id="chatInput" rows="1" maxlength="1000" placeholder="e.g. How could I make my answer to Q1 stronger?" aria-label="Your question"></textarea>
+    <button class="btn" type="submit" id="chatSend">Send</button>
+  </form>
+  <div class="chat-note">Answers are based on this interview and use your Gemini API key. Press Enter to send, Shift+Enter for a new line.</div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if not staff %}
+<script>window.REPORT_CHAT = { id: "{{ iv.id }}" };</script>
+<script src="{{ static_url('js/report-chat.js') }}"></script>
+{% endif %}
 {% endblock %}

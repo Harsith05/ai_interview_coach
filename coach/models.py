@@ -50,6 +50,8 @@ class Interview(Base):
     num_questions: Mapped[int] = mapped_column(Integer)
     resume_text: Mapped[str | None] = mapped_column(Text)
     job_description: Mapped[str | None] = mapped_column(Text)
+    seniority: Mapped[str | None] = mapped_column(String(20))        # fresher | junior | mid | senior
+    focus_topics: Mapped[list | None] = mapped_column(JSON)          # weak topics this interview practises
 
     overall_score: Mapped[float | None] = mapped_column(Float)   # 0-10 average of LLM grades
     summary: Mapped[dict | None] = mapped_column(JSON)
@@ -166,6 +168,17 @@ class ApiKey(Base):
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship(viewonly=True)
+
+
+class ReportChatMessage(Base):
+    """'Ask about my feedback' chat on an interview report (one conversation per interview)."""
+    __tablename__ = "report_chat_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    interview_id: Mapped[str] = mapped_column(ForeignKey("interviews.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(10))          # user | assistant
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Feedback(Base):
