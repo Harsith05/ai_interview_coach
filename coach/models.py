@@ -168,6 +168,24 @@ class ApiKey(Base):
     user: Mapped["User"] = relationship(viewonly=True)
 
 
+class Feedback(Base):
+    """Feedback users send from the app (bug reports, ideas, ratings), read in the admin panel."""
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="other")    # bug | idea | praise | other
+    rating: Mapped[int | None] = mapped_column(Integer)                # 1-5 stars, optional
+    message: Mapped[str] = mapped_column(Text)
+    page: Mapped[str | None] = mapped_column(String(300))              # where it was sent from
+    interview_id: Mapped[str | None] = mapped_column(String(64))       # set when rating an interview
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(String(20), default="new")     # new | read | done
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+    user: Mapped["User | None"] = relationship(viewonly=True)
+
+
 class LoginEvent(Base):
     """Every login attempt (for the admin panel's login history)."""
     __tablename__ = "login_events"

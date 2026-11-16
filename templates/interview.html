@@ -26,6 +26,43 @@
   .rubric { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
   .progressbar { height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 10px; }
   .progressbar div { height: 100%; width: 0; background: var(--primary); transition: width .3s; }
+
+  /* "Generating your report" card shown while the final report is prepared */
+  #report-progress { margin-top: 28px; border-color: #c7d2fe; background: linear-gradient(180deg, #f5f7ff 0%, #fff 70%); }
+  .rp-head { display: flex; align-items: center; gap: 14px; }
+  .rp-head h2 { margin: 0; font-size: 20px; }
+  .rp-head p { margin: 2px 0 0; font-size: 14px; }
+  .rp-time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--primary);
+             background: var(--primary-soft); padding: 4px 10px; border-radius: 999px; font-size: 14px; }
+  .rp-spinner { width: 40px; height: 40px; border-radius: 50%; flex: none; border: 4px solid #e0e7ff;
+                border-top-color: var(--primary); animation: rp-spin .9s linear infinite; }
+  .rp-ready .rp-spinner { animation: none; border-color: var(--success); background: var(--success-soft); position: relative; }
+  .rp-ready .rp-spinner::after { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center;
+                                 color: var(--success); font-weight: 800; font-size: 18px; }
+  @keyframes rp-spin { to { transform: rotate(360deg); } }
+  .rp-bar { height: 8px; background: #e8ebf5; border-radius: 999px; overflow: hidden; margin: 18px 0 6px; }
+  .rp-bar div { height: 100%; width: 0; background: var(--grad); border-radius: 999px; transition: width .6s ease; }
+  .rp-steps { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 10px; }
+  .rp-steps li { display: flex; gap: 12px; align-items: flex-start; color: var(--muted); }
+  .rp-steps li strong { display: block; font-size: 14.5px; font-weight: 600; }
+  .rp-steps li small { font-size: 12.5px; }
+  .rp-icon { width: 24px; height: 24px; border-radius: 50%; flex: none; border: 2px solid #d4d8e3; display: grid;
+             place-items: center; font-size: 13px; font-weight: 800; margin-top: 1px; background: #fff; }
+  .rp-steps li.active { color: var(--text); }
+  .rp-steps li.active .rp-icon { border-color: var(--primary); border-top-color: transparent; animation: rp-spin 1s linear infinite; }
+  .rp-steps li.done { color: var(--text-2); }
+  .rp-steps li.done .rp-icon { border-color: var(--success); background: var(--success); color: #fff; }
+  .rp-steps li.done .rp-icon::after { content: "✓"; }
+  @media (prefers-reduced-motion: reduce) { .rp-spinner, .rp-steps li.active .rp-icon { animation: none; } }
+
+  /* Rate this interview */
+  .rate-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 12px 14px;
+              border: 1px dashed #c7d2fe; border-radius: 12px; background: var(--primary-soft); font-size: 14.5px; }
+  .rate-stars button { background: none; border: 0; font-size: 24px; line-height: 1; padding: 0 1px; cursor: pointer;
+                       color: #c3c9d9; transition: color .1s, transform .1s; }
+  .rate-stars button.on { color: #f59e0b; }
+  .rate-stars button:hover { transform: scale(1.12); }
+  .rate-stars button:focus-visible { outline: 2px solid var(--primary); border-radius: 6px; }
 {% endblock %}
 {% block content %}
 <h1>{{ ROLE_LABELS.get(interview.role, interview.role) }} · {{ MODES.get(interview.mode, interview.mode) }}</h1>
@@ -56,6 +93,28 @@
   </div>
 </div>
 
+<div id="report-progress" class="card" hidden aria-live="polite">
+  <div class="rp-head">
+    <div class="rp-spinner" aria-hidden="true"></div>
+    <div>
+      <h2 id="rpTitle">Generating your report…</h2>
+      <p class="muted" id="rpSub">This usually takes 20–60 seconds. Please keep this tab open.</p>
+    </div>
+    <div class="rp-time" id="rpTime" title="Time elapsed">0:00</div>
+  </div>
+  <div class="rp-bar" aria-hidden="true"><div id="rpBar"></div></div>
+  <ol class="rp-steps">
+    <li data-stage="analyze"><span class="rp-icon"></span><div><strong>Analyzing your answers</strong>
+      <small id="rpAnalyzeNote">Transcripts, voice and camera</small></div></li>
+    <li data-stage="grade"><span class="rp-icon"></span><div><strong>Grading with AI</strong>
+      <small>Accuracy, depth, structure and communication</small></div></li>
+    <li data-stage="summarize"><span class="rp-icon"></span><div><strong>Summarizing your interview</strong>
+      <small>Overall score, filler words and eye contact</small></div></li>
+    <li data-stage="write"><span class="rp-icon"></span><div><strong>Writing your coach's report</strong>
+      <small>Strengths, weaknesses and an improvement plan</small></div></li>
+  </ol>
+</div>
+
 <div id="feedback-section" class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
     <h2 style="margin:0">📋 Interview feedback</h2>
@@ -63,6 +122,12 @@
       <a class="btn secondary small" id="reportLink" href="#">Full report</a>
       <a class="btn small" id="pdfLink" href="#">Download PDF</a>
     </div>
+  </div>
+  <div class="rate-box" id="rate-interview" hidden>
+    <span id="rateLabel">How useful was this interview?</span>
+    <span class="rate-stars" id="rateStars" role="group" aria-label="Rate this interview">
+      {% for i in range(1, 6) %}<button type="button" data-rating="{{ i }}" aria-label="{{ i }} star{{ 's' if i > 1 }}">★</button>{% endfor %}
+    </span>
   </div>
   <div id="summary_box" style="margin-top:16px"></div>
   <div id="feedback-content"></div>

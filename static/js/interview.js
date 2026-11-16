@@ -375,6 +375,90 @@
     });
   }
 
+  // ---------------------------------------------------------------- "Generating your report" card
+  // After the last answer the server analyzes every answer, grades them, summarizes and writes the
+  // report (20-60 s). Each step arrives as a `status` event with a `stage`; this card shows them.
+  const REPORT_STAGES = ['analyze', 'grade', 'summarize', 'write'];
+  const rp = { el: $('report-progress'), stage: -1, started: 0, timer: null, analyzed: 0, total: 0 };
+
+  function rpTick() {
+    const s = Math.floor((Date.now() - rp.started) / 1000);
+    $('rpTime').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (s === 75) $('rpSub').textContent = 'Taking a little longer than usual (the AI may be busy). Still working…';
+  }
+
+  function rpRender() {
+    rp.el.querySelectorAll('.rp-steps li').forEach((li, i) => {
+      li.classList.toggle('done', i < rp.stage);
+      li.classList.toggle('active', i === rp.stage);
+    });
+    // Each stage is a quarter of the bar; answer analysis fills its quarter answer by answer.
+    let frac = (rp.stage + 0.5) / REPORT_STAGES.length;
+    if (rp.stage === 0 && rp.total) frac = (0.15 + 0.85 * rp.analyzed / rp.total) / REPORT_STAGES.length;
+    $('rpBar').style.width = `${Math.round(Math.max(frac, 0.04) * 100)}%`;
+  }
+
+  function setReportStage(stage) {
+    const idx = REPORT_STAGES.indexOf(stage);
+    if (idx < 0 || idx < rp.stage) return;   // never go backwards (analysis runs in parallel)
+    if (rp.el.hidden) {
+      rp.el.hidden = false;
+      rp.el.classList.remove('rp-ready');
+      $('rpTitle').textContent = 'Generating your report…';
+      rp.started = Date.now();
+      rpTick();
+      clearInterval(rp.timer);
+      rp.timer = setInterval(rpTick, 1000);
+      rp.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.Robot?.say('Great job! Give me a moment to prepare your report.');
+    }
+    rp.stage = idx;
+    rpRender();
+  }
+
+  function setAnalyzeProgress(done, total) {
+    rp.analyzed = done; rp.total = total;
+    $('rpAnalyzeNote').textContent = `${done} of ${total} answer${total === 1 ? '' : 's'} analyzed`;
+    rpRender();
+  }
+
+  function finishReportProgress() {
+    if (rp.el.hidden) return;
+    clearInterval(rp.timer);
+    rp.stage = REPORT_STAGES.length;
+    rpRender();
+    $('rpBar').style.width = '100%';
+    rp.el.classList.add('rp-ready');
+    $('rpTitle').textContent = 'Your report is ready';
+    $('rpSub').textContent = `Done in ${$('rpTime').textContent}. Scroll down to read it.`;
+    setTimeout(() => { rp.el.hidden = true; }, 2500);
+  }
+
+  function hideReportProgress() {
+    clearInterval(rp.timer);
+    rp.el.hidden = true;
+    rp.stage = -1;
+  }
+
+  // ---------------------------------------------------------------- rate this interview
+  const rateStars = [...document.querySelectorAll('#rateStars button')];
+  const paintRate = (n) => rateStars.forEach((b, i) => b.classList.toggle('on', i < n));
+  rateStars.forEach((b, i) => {
+    b.addEventListener('mouseenter', () => paintRate(i + 1));
+    b.addEventListener('focus', () => paintRate(i + 1));
+    b.addEventListener('click', () => window.openFeedback?.({
+      rating: i + 1, interviewId: CFG.id, kind: i + 1 >= 4 ? 'praise' : 'other',
+      title: 'Rate this interview',
+      intro: 'Thanks for rating! Anything that worked well, or that we should improve? (optional)',
+    }));
+  });
+  $('rateStars')?.addEventListener('mouseleave', () => paintRate(0));
+  document.addEventListener('feedback:sent', (e) => {
+    if (e.detail?.interviewId !== CFG.id || !e.detail.rating) return;
+    $('rateStars').hidden = true;
+    $('rateLabel').textContent = `Thanks for rating this interview ${'★'.repeat(e.detail.rating)}!`;
+  });
+
   // Shared handler for every streamed event from the server.
   let streamedHtml = '';
   async function handleEvent(ev) {
@@ -382,6 +466,7 @@
       case 'status':
         setStatus(ev.text);
         window.Robot?.state('thinking', ev.text);
+        if (ev.stage) setReportStage(ev.stage);
         break;
       case 'question':
         submitting = false;
@@ -389,9 +474,14 @@
         break;
       case 'progress':
         setStatus(ev.text);
-        if (ev.total) setProgress(ev.done / ev.total);
+        if (ev.total) {
+          setProgress(ev.done / ev.total);
+          setReportStage('analyze');
+          setAnalyzeProgress(ev.done, ev.total);
+        }
         break;
       case 'token': {
+        setReportStage('write');
         const section = $('feedback-section');
         if (section.style.display !== 'block') {
           section.style.display = 'block';
@@ -403,6 +493,7 @@
         break;
       }
       case 'done':
+        finishReportProgress();
         finishInterview(ev);
         break;
       case 'error':
@@ -474,11 +565,13 @@
     $('reportLink').href = ev.report_url;
     $('pdfLink').href = `${ev.report_url}.pdf`;
     $('report-links').style.display = 'flex';
+    if (window.openFeedback) $('rate-interview').hidden = false;
     $('feedback-section').scrollIntoView({ behavior: 'smooth' });
   }
 
   function fail(e) {
     console.error(e);
+    hideReportProgress();
     window.Robot?.state('idle', 'Something went wrong. Click Resume.');
     running = false;
     submitting = false;

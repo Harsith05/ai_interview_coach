@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
 from coach.api import (account_routes, auth_routes, dashboard_routes, drill_routes,  # noqa: E402
-                       practice_routes, staff_routes, talk_routes)
+                       feedback_routes, practice_routes, staff_routes, talk_routes)
 from coach.admin import setup_admin  # noqa: E402
 from coach.api.routes import api, pages  # noqa: E402
 from coach.auth import LoginRequired  # noqa: E402
@@ -110,6 +110,7 @@ app.include_router(talk_routes.router)
 app.include_router(drill_routes.router)
 app.include_router(api)
 app.include_router(staff_routes.router)
+app.include_router(feedback_routes.router)
 setup_admin(app)   # Django-admin-style panel at /admin (admins only)
 app.add_middleware(SlowRequestLogger, threshold=2.0)
 register_error_handlers(app)   # friendly 404/500/503 pages, offline page + service worker, /healthz

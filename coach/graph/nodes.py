@@ -21,9 +21,14 @@ log = logging.getLogger(__name__)
 LEVELS = ["easy", "medium", "hard"]
 
 
-def _progress(text: str) -> None:
+def _progress(text: str, stage: str | None = None) -> None:
+    """Send a status line to the browser. `stage` marks a step of report generation
+    (analyze → grade → summarize → write) so the page can show a progress checklist."""
+    event = {"type": "status", "text": text}
+    if stage:
+        event["stage"] = stage
     try:
-        get_stream_writer()({"type": "status", "text": text})
+        get_stream_writer()(event)
     except Exception:
         pass  # not streaming
 
@@ -232,6 +237,7 @@ def route_after_follow_up(state: InterviewState):
 
 def analyze_answer(job: AnswerJob) -> dict:
     """Pick up the background result (waiting only if it's still running)."""
+    _progress("Analyzing your answers…", stage="analyze")
     result = jobs.collect(job["interview_id"], job["mode"], job["item"], job["submission"])
     return {"results": [result]}
 
@@ -248,7 +254,7 @@ _EMPTY_GRADE = {"overall": 0.0, "accuracy": 1, "depth": 1, "structure": 1, "comm
 
 def grade_answers(state: InterviewState) -> dict:
     """Grade all answers in ONE LLM call (Gemini's free tier allows very few requests per day)."""
-    _progress("Grading your answers…")
+    _progress("Grading your answers…", stage="grade")
     results = state.get("results", [])
     behavioral = state.get("mode") == "behavioral"
     graded: dict[int, dict] = {}
@@ -292,7 +298,7 @@ def _avg(values):
 
 
 def summarize(state: InterviewState) -> dict:
-    _progress("Summarizing your interview…")
+    _progress("Summarizing your interview…", stage="summarize")
     results = state.get("results", [])
     grades = [r.get("grade") or {} for r in results]
     spoken = [r for r in results if r.get("transcript")]
@@ -338,7 +344,7 @@ def generate_feedback(state: InterviewState) -> dict:
     results = state.get("results", [])
     if not results:
         return {"feedback": "<p>No answers were recorded.</p>"}
-    _progress("Writing your feedback report…")
+    _progress("Writing your feedback report…", stage="write")
     s = state.get("summary", {})
     lines = [f"Role: {ROLE_LABELS.get(state.get('role'), state.get('role'))} | Interview type: {state.get('mode')}",
              f"Summary metrics: {s}", ""]

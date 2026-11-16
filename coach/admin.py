@@ -14,11 +14,12 @@ from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import selectinload
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse
+from wtforms import SelectField
 
 from coach.config import ADMIN_EMAILS, BASE_DIR, ROLE_LABELS, SECRET_KEY
 from coach.db import db_session, engine
-from coach.models import (AnswerResult, ApiKey, DrillSession, Interview, LoginEvent, PracticeSession,
-                          QuestionSet, TalkSession, User)
+from coach.models import (AnswerResult, ApiKey, DrillSession, Feedback, Interview, LoginEvent,
+                          PracticeSession, QuestionSet, TalkSession, User)
 
 
 def is_admin(user: User | None) -> bool:
@@ -273,6 +274,44 @@ class ApiKeyAdmin(ModelView, model=ApiKey):
     can_create = can_edit = can_export = False
 
 
+_KIND_BADGE = {"bug": ("red", "🐞 Bug"), "idea": ("blue", "💡 Idea"), "praise": ("green", "❤️ Praise"),
+               "other": ("secondary", "Other")}
+_STATUS_BADGE = {"new": "orange", "read": "blue", "done": "green"}
+
+
+class FeedbackAdmin(ModelView, model=Feedback):
+    name, name_plural, icon = "Feedback", "Feedback", "fa-solid fa-comment-dots"
+    category = "Support"
+    column_list = [Feedback.created_at, Feedback.user, Feedback.kind, Feedback.rating, Feedback.message,
+                   Feedback.status]
+    column_details_list = column_list + [Feedback.page, Feedback.interview_id, Feedback.user_agent]
+    column_labels = {Feedback.created_at: "When", Feedback.user: "From", Feedback.kind: "Type", Feedback.rating: "Rating",
+                     Feedback.page: "Sent from", Feedback.interview_id: "Interview", Feedback.user_agent: "Browser"}
+    column_searchable_list = [Feedback.message]
+    column_sortable_list = [Feedback.created_at, Feedback.rating, Feedback.status]
+    column_default_sort = (Feedback.created_at, True)
+    column_filters = [AllUniqueStringValuesFilter(Feedback.kind), AllUniqueStringValuesFilter(Feedback.status)]
+    column_formatters = {
+        Feedback.created_at: lambda m, a: _dt(m.created_at),
+        Feedback.kind: lambda m, a: Markup('<span class="badge bg-{}-lt">{}</span>'.format(
+            *_KIND_BADGE.get(m.kind, ("secondary", escape(m.kind))))),
+        Feedback.rating: lambda m, a: "★" * m.rating + "☆" * (5 - m.rating) if m.rating else "–",
+        Feedback.message: lambda m, a: (m.message[:120] + "…") if len(m.message or "") > 120 else (m.message or "–"),
+        Feedback.status: lambda m, a: Markup('<span class="badge bg-{}-lt">{}</span>'.format(
+            _STATUS_BADGE.get(m.status, "secondary"), escape(m.status))),
+    }
+    column_formatters_detail = {Feedback.created_at: lambda m, a: _dt(m.created_at),
+                                Feedback.kind: column_formatters[Feedback.kind],
+                                Feedback.rating: column_formatters[Feedback.rating],
+                                Feedback.status: column_formatters[Feedback.status]}
+    # Admins only change the status (new → read → done); what users wrote stays as sent.
+    form_columns = [Feedback.status]
+    form_overrides = {"status": SelectField}
+    form_args = {"status": {"label": "Status",
+                            "choices": [("new", "New"), ("read", "Read"), ("done", "Done")]}}
+    can_create = can_export = False
+
+
 # ---------------------------------------------------------------- overview page
 
 class OverviewView(BaseView):
@@ -319,6 +358,6 @@ def setup_admin(app) -> Admin:
     admin = Admin(app, engine, title="AI Interview Coach · Admin", base_url="/admin",
                   templates_dir=str(BASE_DIR / "templates" / "admin"), authentication_backend=AdminAuth())
     for view in (OverviewView, UserAdmin, LoginEventAdmin, ApiKeyAdmin, InterviewAdmin, AnswerAdmin,
-                 PracticeAdmin, DrillAdmin, TalkAdmin, QuestionSetAdmin):
+                 PracticeAdmin, DrillAdmin, TalkAdmin, QuestionSetAdmin, FeedbackAdmin):
         admin.add_view(view)
     return admin

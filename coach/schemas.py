@@ -1,4 +1,19 @@
-from pydantic import BaseModel, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class FeedbackRequest(BaseModel):
+    kind: Literal["bug", "idea", "praise", "other"] = "other"
+    rating: int | None = Field(default=None, ge=1, le=5)
+    message: str = Field(default="", max_length=2000)
+    page: str | None = Field(default=None, max_length=300)
+    interview_id: str | None = Field(default=None, max_length=64)
+
+    @field_validator("message")
+    @classmethod
+    def strip_message(cls, v: str) -> str:
+        return v.strip()
 
 
 class ScoreRequest(BaseModel):

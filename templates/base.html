@@ -135,6 +135,41 @@
     footer.site .inner { max-width: 1200px; margin: 0 auto; padding: 18px 20px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
     footer.site a { color: var(--muted); text-decoration: none; }
     footer.site a:hover { color: var(--text); }
+    footer.site button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
+    footer.site button.linklike:hover { color: var(--text); }
+
+    /* ---------- feedback dialog ---------- */
+    .fb-dialog { width: min(480px, calc(100vw - 32px)); border: 0; border-radius: 18px; padding: 0;
+                 box-shadow: 0 24px 64px rgba(15,23,42,.28); color: var(--text); }
+    .fb-dialog::backdrop { background: rgba(15,23,42,.45); backdrop-filter: blur(2px); }
+    .fb-dialog form { padding: 22px 22px 18px; margin: 0; }
+    .fb-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .fb-head h2 { margin: 0; font-size: 19px; }
+    .fb-x { background: none; border: 0; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer;
+            padding: 2px 6px; border-radius: 8px; }
+    .fb-x:hover { background: #f1f2f9; color: var(--text); }
+    .fb-intro { margin: 6px 0 4px; color: var(--muted); font-size: 14px; }
+    .fb-dialog label.fb-label { margin: 14px 0 8px; }
+    .fb-kinds { display: flex; flex-wrap: wrap; gap: 8px; }
+    .fb-kinds label { margin: 0; font-weight: 500; font-size: 14px; cursor: pointer; }
+    .fb-kinds input { position: absolute; opacity: 0; pointer-events: none; }
+    .fb-kinds span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px;
+                     border: 1px solid var(--border); background: #fff; transition: border-color .15s, background .15s; }
+    .fb-kinds input:checked + span { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+    .fb-kinds input:focus-visible + span { box-shadow: 0 0 0 3px rgba(79,70,229,.25); }
+    .fb-stars { display: inline-flex; gap: 2px; }
+    .fb-star { background: none; border: 0; padding: 2px; font-size: 28px; line-height: 1; cursor: pointer;
+               color: #d4d8e3; transition: color .1s, transform .1s; }
+    .fb-star.on { color: #f59e0b; }
+    .fb-star:hover { transform: scale(1.1); }
+    .fb-star:focus-visible { outline: 2px solid var(--primary); border-radius: 6px; }
+    .fb-dialog textarea { min-height: 110px; resize: vertical; }
+    .fb-meta { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+    .fb-error { color: var(--danger); font-size: 13.5px; min-height: 18px; margin-top: 8px; }
+    .fb-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+    .fb-done { text-align: center; padding: 26px 10px 14px; }
+    .fb-done .tick { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 12px; display: grid; place-items: center;
+                     background: var(--success-soft); color: var(--success); font-size: 28px; }
     {% block styles %}{% endblock %}
   </style>
 </head>
@@ -169,6 +204,7 @@
             <a href="/settings">⚙️ Account</a>
             <a href="/settings/api-keys">🔑 Gemini API keys</a>
             <a href="/memory">🧠 Talk memory</a>
+            <button type="button" onclick="openFeedback()">💬 Send feedback</button>
             <form method="post" action="/logout"><button type="submit">↩ Log out</button></form>
           </div>
         </details>
@@ -192,7 +228,7 @@
   </main>
   <footer class="site"><div class="inner">
     <span>© AI Interview Coach · practise interviews and spoken English with AI</span>
-    <span>{% if user %}<a href="/settings/api-keys">API keys</a> · <a href="/settings">Account</a>{% else %}<a href="/login">Log in</a> · <a href="/register">Sign up</a>{% endif %}</span>
+    <span>{% if user %}<button type="button" class="linklike" onclick="openFeedback()">Feedback</button> · <a href="/settings/api-keys">API keys</a> · <a href="/settings">Account</a>{% else %}<a href="/login">Log in</a> · <a href="/register">Sign up</a>{% endif %}</span>
   </div></footer>
   <script>
     // Close the account menu when clicking elsewhere.
@@ -200,6 +236,48 @@
       document.querySelectorAll('details.menu[open]').forEach(d => { if (!d.contains(e.target)) d.removeAttribute('open'); });
     });
   </script>
+  {% if user %}
+  <dialog class="fb-dialog" id="feedbackDialog" aria-labelledby="fbTitle">
+    <form id="feedbackForm" novalidate>
+      <div id="fbBody">
+        <div class="fb-head">
+          <h2 id="fbTitle">Send feedback</h2>
+          <button type="button" class="fb-x" data-fb-close aria-label="Close">×</button>
+        </div>
+        <p class="fb-intro" id="fbIntro"></p>
+
+        <label class="fb-label">What's it about?</label>
+        <div class="fb-kinds" role="radiogroup">
+          <label><input type="radio" name="fbKind" value="bug"><span>🐞 Bug</span></label>
+          <label><input type="radio" name="fbKind" value="idea"><span>💡 Idea</span></label>
+          <label><input type="radio" name="fbKind" value="praise"><span>❤️ Praise</span></label>
+          <label><input type="radio" name="fbKind" value="other" checked><span>💬 Other</span></label>
+        </div>
+
+        <label class="fb-label">Your rating <span class="hint" style="font-weight:400">(optional)</span></label>
+        <div class="fb-stars" role="radiogroup" aria-label="Rating, 1 to 5 stars">
+          {% for i in range(1, 6) %}<button type="button" class="fb-star" role="radio" aria-checked="false" aria-label="{{ i }} star{{ 's' if i > 1 }}">★</button>{% endfor %}
+        </div>
+
+        <label class="fb-label" for="fbMessage">Message</label>
+        <textarea id="fbMessage" maxlength="2000" placeholder="What happened, or what would make the app better?"></textarea>
+        <div class="fb-meta"><span>Sent with your name and email so we can follow up.</span><span id="fbCount">0/2000</span></div>
+        <div class="fb-error" id="fbError" role="alert"></div>
+
+        <div class="fb-actions">
+          <button type="button" class="btn secondary" data-fb-close>Cancel</button>
+          <button type="submit" class="btn" id="fbSend">Send feedback</button>
+        </div>
+      </div>
+      <div class="fb-done" id="fbDone" hidden>
+        <div class="tick">✓</div>
+        <h2 style="margin:0 0 6px">Thank you!</h2>
+        <p class="muted" style="margin:0">Your feedback was sent.</p>
+      </div>
+    </form>
+  </dialog>
+  <script src="{{ static_url('js/feedback.js') }}"></script>
+  {% endif %}
   <script src="{{ static_url('js/net-status.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
